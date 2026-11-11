@@ -1,0 +1,16 @@
+{
+  "name": "g1-allin1",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "G1: a voice-first phone replacement. Software that runs today, hardware at iPhone 1 size.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "test": "TZ=Asia/Kolkata node --test tests/*.test.js",
+    "test:browser": "node tests/browser/smoke.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": {
+    "playwright-core": "^1.65.0"
+  }
+}

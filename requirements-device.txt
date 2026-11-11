@@ -1,0 +1,7 @@
+# Only on the Raspberry Pi dev kit
+sounddevice>=0.4
+numpy>=1.26
+gpiozero>=2.0
+pyserial>=3.5
+openwakeword>=0.6
+faster-whisper>=1.0
