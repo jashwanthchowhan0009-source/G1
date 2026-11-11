@@ -28,7 +28,7 @@ async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS) {
 }
 
 // When Google's newest model is overloaded or slow, G1 moves on to the next one instead of failing.
-const GEMINI_FALLBACKS = ['gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
+const GEMINI_FALLBACKS = ['gemini-flash-lite-latest', 'gemini-2.5-flash'];
 const ATTEMPT_MS = 8000;
 
 /** One chat completion, trying fallback models on overload, rate limit or timeout. Returns { status, type, text, model }. */
@@ -63,7 +63,7 @@ async function askLLM(env, payload, fetchImpl) {
 
 function llmTarget(env) {
   const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
-  return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.8-flash' };
+  return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.5-flash' };
 }
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -83,7 +83,7 @@ async function readJson(request) {
 }
 
 export async function health(request, env, fetchImpl = fetch) {
-  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.8-flash' };
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash' };
   // /api/health?test=1 makes one tiny AI call and reports how it went (never the key).
   if (new URL(request.url).searchParams.get('test') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();

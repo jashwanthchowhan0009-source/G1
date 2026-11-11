@@ -49,7 +49,7 @@ Either put keys in **Settings** inside G1 (they stay on that device), or set the
 | Variable | For |
 |---|---|
 | `LLM_API_KEY` | AI brain. A free Gemini key works: https://aistudio.google.com/apikey |
-| `LLM_BASE_URL`, `LLM_MODEL` | Optional. Default is Gemini's OpenAI-compatible endpoint with `gemini-3.8-flash` |
+| `LLM_BASE_URL`, `LLM_MODEL` | Optional. Default is Gemini's OpenAI-compatible endpoint with `gemini-3.5-flash` |
 | `ELEVENLABS_API_KEY` | Natural voice |
 | `G1_PASSCODE` | Optional lock, so only your devices can use your keys. Enter the same value as "Device key" in Settings |
 

@@ -10,7 +10,7 @@ const upstreamOk = (calls) => async (url, init) => {
 };
 
 test('health reports what is configured, and ?test=1 makes one AI call', async () => {
-  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, locked: false, model: 'gemini-3.8-flash' });
+  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, locked: false, model: 'gemini-3.5-flash' });
   const calls = [];
   const j = await (await health(new Request('http://x/api/health?test=1'), ENV, upstreamOk(calls))).json();
   assert.equal(j.test.status, 200);
@@ -26,7 +26,7 @@ test('chat forwards messages and tools, keeps the key server-side, and passes er
   const res = await chat(post('/api/llm', { messages: [{ role: 'user', content: 'hi' }], tools }), ENV, upstreamOk(calls));
   assert.equal(res.status, 200);
   assert.equal((await res.json()).choices[0].message.content, 'ok');
-  assert.equal(calls[0].body.model, 'gemini-3.8-flash');
+  assert.equal(calls[0].body.model, 'gemini-3.5-flash');
   assert.equal(calls[0].body.reasoning_effort, 'low');
   assert.equal(calls[0].body.tool_choice, 'auto');
   // a non-Gemini service is not sent Gemini-only options
@@ -68,15 +68,15 @@ test('when the first Gemini model is overloaded or slow, the next one answers', 
   const flaky = async (url, init) => {
     const body = JSON.parse(init.body);
     tried.push(body.model);
-    if (body.model === 'gemini-3.8-flash') return new Response(JSON.stringify([{ error: { message: 'high demand' } }]), { status: 503 });
+    if (body.model === 'gemini-3.5-flash') return new Response(JSON.stringify([{ error: { message: 'high demand' } }]), { status: 503 });
     return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { headers: { 'content-type': 'application/json' } });
   };
   const res = await chat(post('/api/llm', { messages: [{ role: 'user', content: 'hi' }] }), ENV, flaky);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('x-g1-model'), 'gemini-3.5-flash');
-  assert.deepEqual(tried, ['gemini-3.8-flash', 'gemini-3.5-flash']);
+  assert.equal(res.headers.get('x-g1-model'), 'gemini-flash-lite-latest');
+  assert.deepEqual(tried, ['gemini-3.5-flash', 'gemini-flash-lite-latest']);
   const j = await (await health(new Request('http://x/api/health?test=1'), ENV, flaky)).json();
-  assert.equal(j.test.model, 'gemini-3.5-flash');
+  assert.equal(j.test.model, 'gemini-flash-lite-latest');
   // a bad key is not retried on other models
   tried.length = 0;
   const bad = await chat(post('/api/llm', { messages: [] }), ENV, async (u, init) => (tried.push(JSON.parse(init.body).model), new Response('{"error":{"message":"bad key"}}', { status: 400 })));

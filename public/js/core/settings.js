@@ -13,7 +13,7 @@ export const LLM_PRESETS = {
   gemini: {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-3.8-flash',
+    model: 'gemini-3.5-flash',
   },
   groq: { label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   custom: { label: 'Other (OpenAI-compatible)', baseUrl: '', model: '' },
