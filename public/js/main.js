@@ -25,6 +25,7 @@ let state = 'idle';
 let busy = false;
 let followUpUntil = 0;
 let queued = '';
+let chipPrefix = ''; // a shortcut chip was tapped: the next thing heard completes it
 
 const hi = () => settings.get().language === 'hi-IN';
 const T = (en, hin) => (hi() ? hin : en);
@@ -129,6 +130,11 @@ const ears = createEars({
 async function hear(text) {
   text = String(text || '').trim();
   if (!text) return;
+  if (chipPrefix) {
+    // "Call" chip + "Papa" becomes "call Papa", unless the user said a full request anyway
+    if (!/^(call|send|tell|whatsapp|message|remind|pay|what|set|play|open|stop|cancel|no|nahi)\b/i.test(text)) text = chipPrefix + text;
+    chipPrefix = '';
+  }
   if (busy) {
     // G1 is mid-answer: cut it short and take the new request next
     queued = text;
@@ -221,6 +227,29 @@ function showTypebar(on) {
 }
 
 $('mic').addEventListener('click', micPressed);
+
+// Shortcut chips: one tap starts the request, G1 asks for the rest and listens.
+const CHIPS = {
+  call: { prefix: 'call ', en: 'Who should I call?', hi: 'Kisko call karu?' },
+  message: { prefix: 'send a whatsapp to ', en: 'Who is it for, and what should I say?', hi: 'Kisko bhejna hai, aur kya bolu?' },
+  remind: { prefix: 'remind me to ', en: 'Remind you about what, and when?', hi: 'Kis cheez ka reminder, aur kab?' },
+  pay: { prefix: 'pay ', en: 'Pay whom, and how much?', hi: 'Kisko, aur kitne rupaye?' },
+};
+$('chips').addEventListener('click', async (e) => {
+  const key = e.target.closest('button')?.dataset.chip;
+  if (!key || busy) return;
+  voice.unlock();
+  if (key === 'weather') return hear(T("what's the weather", 'aaj mausam kaisa hai'));
+  const chip = CHIPS[key];
+  busy = true;
+  ears.pause();
+  $('heard').textContent = '';
+  await present({ say: T(chip.en, chip.hi) });
+  busy = false;
+  chipPrefix = chip.prefix;
+  if (!ears.supported) showTypebar(true);
+  afterReply({ expectReply: true });
+});
 $('keys').addEventListener('click', () => showTypebar($('typebar').hidden));
 $('typebar').addEventListener('submit', (e) => {
   e.preventDefault();

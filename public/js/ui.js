@@ -1,8 +1,8 @@
-// Drawing: the marigold that shows what G1 is doing, and the single result card.
+// Drawing: the white bloom that shows what G1 is doing, and the single result card.
 
 const PETALS = 54;
 
-/** The marigold. state: idle | listening | thinking | speaking */
+/** The bloom. state: idle | listening | thinking | speaking */
 export function createBloom(canvas) {
   const ctx = canvas.getContext('2d');
   const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -41,9 +41,9 @@ export function createBloom(canvas) {
       const r1 = base + Math.max(0.03, len) * W;
       const ang = a + spin;
       const grad = ctx.createLinearGradient(c + Math.cos(ang) * r0, c + Math.sin(ang) * r0, c + Math.cos(ang) * r1, c + Math.sin(ang) * r1);
-      const warm = state === 'listening' ? '#FFE3A8' : '#FFD27A';
-      grad.addColorStop(0, state === 'thinking' ? '#B99BFF' : '#F2A20C');
-      grad.addColorStop(1, state === 'thinking' ? '#EFEAF7' : warm);
+      const warm = '#FFFFFF';
+      grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+      grad.addColorStop(1, warm);
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = grad;
       ctx.lineWidth = W * 0.013;
@@ -55,7 +55,7 @@ export function createBloom(canvas) {
     }
     // centre
     ctx.globalAlpha = 1;
-    ctx.fillStyle = state === 'listening' ? '#FFD27A' : '#F2A20C';
+    ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
     ctx.arc(c, c, W * (0.045 + (state === 'speaking' ? 0.012 * Math.abs(Math.sin(t * 9.5)) : 0)), 0, Math.PI * 2);
     ctx.fill();

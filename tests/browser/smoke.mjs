@@ -20,6 +20,8 @@ const fakes = () => {
   window.__spoken = [];
   window.__opened = [];
   window.open = (url) => (window.__opened.push(url), {});
+  // tel:, sms:, upi: links would leave the page in a test browser; record them through the native hook instead
+  window.G1Native = { open: (url) => (/^https?:/.test(url) ? null : (window.__opened.push(url), 'opened')) };
   class FakeRecognition {
     start() {
       window.__rec = this;
@@ -128,6 +130,15 @@ async function speak(page, text) {
   await page.evaluate(() => window.__say('remind me to call the bank at 4 pm tomorrow'));
   await page.waitForFunction(() => /remind you tomorrow at 4 PM/.test(document.getElementById('said').textContent));
 
+  // shortcut chip: tap Call, G1 asks who, the answer completes the request
+  await idle(page);
+  await page.click('[data-chip="call"]');
+  await page.waitForFunction(() => /Who should I call\?/.test(document.getElementById('said').textContent));
+  await speak(page, 'papa');
+  assert.match(await said(page), /Calling papa/i);
+  assert.equal((await page.evaluate(() => window.__opened)).at(-1), 'tel:+919876543210');
+  await page.screenshot({ path: OUT + '5b-chip-call.png' });
+
   // typing works too
   await idle(page);
   await page.click('#keys');
@@ -196,9 +207,11 @@ async function speak(page, text) {
   const clean = await page.evaluate(() => {
     const r = (id) => document.getElementById(id).getBoundingClientRect();
     const order = ['clock', 'bloom', 'heard', 'said', 'card', 'mic'].map(r);
+    if (getComputedStyle(document.getElementById('chips')).display !== 'none') return false; // chips give way to the card on the small screen
+    window.__rects = ['clock', 'bloom', 'heard', 'said', 'card', 'mic', 'hint', 'screen'].map((id) => [id, Math.round(r(id).top), Math.round(r(id).bottom)]);
     return order.every((b, i) => i === 0 || b.top >= order[i - 1].bottom - 1) && r('hint').bottom <= r('screen').bottom + 1;
   });
-  assert.equal(clean, true, 'no part of the 320 by 480 screen overlaps another');
+  assert.equal(clean, true, 'no part of the 320 by 480 screen overlaps another: ' + JSON.stringify(await page.evaluate(() => [window.__rects, getComputedStyle(document.getElementById('chips')).display])));
   assert.deepEqual(errors, []);
   await page.close();
 }

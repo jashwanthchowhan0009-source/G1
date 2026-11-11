@@ -1,5 +1,5 @@
 // Keeps the G1 screen available offline. Network first, so updates arrive straight away.
-const CACHE = 'g1-v1';
+const CACHE = 'g1-v2';
 const SHELL = ['/', '/css/g1.css', '/js/main.js', '/fonts/anek-latin.woff2', '/icons/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

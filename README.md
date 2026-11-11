@@ -2,6 +2,8 @@
 
 **A voice-first phone by SherrByte.** Say it and it's done: calls, WhatsApp, UPI, reminders, directions, music, camera questions, making and posting videos. Everything except scrolling.
 
+![G1 app](docs/g1_app_desktop.png)
+
 ![G1 Phone shell drawing](docs/g1_phone_drawing.png)
 
 ## G1 in one specification
@@ -9,6 +11,7 @@
 |---|---|
 | Body | 115.0 × 61.0 × 11.6 mm, the size of the first iPhone |
 | Screen | 3.5", 320 × 480. One answer and one card at a time. No feeds, nothing to scroll |
+| Look | Navy blue ground (about 81%), white words, cards and mic (about 10%), black dock and buttons (about 9%). Five shortcut chips: Call, Message, Remind, Weather, Pay |
 | Input | Voice. One side key to talk, or say "Hey G1" |
 | Voice | Natural human voice (ElevenLabs) with 5 Indian voices to pick from; falls back to the device voice |
 | Languages | English, Hindi/Hinglish, Telugu. With the AI brain it mirrors whatever mix you speak |
