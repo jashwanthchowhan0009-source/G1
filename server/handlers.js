@@ -74,6 +74,15 @@ export async function health(request, env, fetchImpl = fetch) {
       info.test = { status: 0, ms: Date.now() - started, error: e.name === 'AbortError' ? 'AI service did not answer in time' : 'could not reach the AI service' };
     }
   }
+  // /api/health?models=1 lists the model names this key can use.
+  if (new URL(request.url).searchParams.get('models') && env.LLM_API_KEY && !locked(request, env)) {
+    try {
+      const r = await timedFetch(fetchImpl, llmTarget(env).base + '/models', { headers: { Authorization: 'Bearer ' + env.LLM_API_KEY } }, 10000);
+      info.models = (JSON.parse(r.text).data || []).map((m) => String(m.id).replace(/^models\//, ''));
+    } catch {
+      info.models = [];
+    }
+  }
   return json(info);
 }
 
