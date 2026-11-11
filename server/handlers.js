@@ -27,6 +27,40 @@ async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS) {
   }
 }
 
+// When Google's newest model is overloaded or slow, G1 moves on to the next one instead of failing.
+const GEMINI_FALLBACKS = ['gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
+const ATTEMPT_MS = 8000;
+
+/** One chat completion, trying fallback models on overload, rate limit or timeout. Returns { status, type, text, model }. */
+async function askLLM(env, payload, fetchImpl) {
+  const t = llmTarget(env);
+  const first = env.LLM_MODEL || payload.model || t.model;
+  const models = t.isGemini ? [first, ...GEMINI_FALLBACKS.filter((m) => m !== first)].slice(0, 3) : [first];
+  let last = null;
+  for (const model of models) {
+    try {
+      const r = await timedFetch(
+        fetchImpl,
+        t.base + '/chat/completions',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.LLM_API_KEY },
+          body: JSON.stringify({ ...payload, model, ...(t.isGemini ? { reasoning_effort: 'low' } : {}) }),
+        },
+        models.length > 1 ? ATTEMPT_MS : UPSTREAM_TIMEOUT_MS,
+      );
+      last = { ...r, model };
+      if (r.status !== 429 && r.status < 500) return last; // success, or an error another model will not fix
+      console.error('AI model busy', model, r.status, r.text.slice(0, 160));
+    } catch (e) {
+      if (e.name !== 'AbortError') throw e;
+      console.error('AI model slow', model);
+      last = last || { status: 504, type: 'application/json', text: JSON.stringify({ error: { message: 'The AI service did not answer in time' } }), model };
+    }
+  }
+  return last;
+}
+
 function llmTarget(env) {
   const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
   return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.8-flash' };
@@ -52,26 +86,22 @@ export async function health(request, env, fetchImpl = fetch) {
   const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.8-flash' };
   // /api/health?test=1 makes one tiny AI call and reports how it went (never the key).
   if (new URL(request.url).searchParams.get('test') && env.LLM_API_KEY && !locked(request, env)) {
-    const t = llmTarget(env);
     const started = Date.now();
     try {
-      const r = await timedFetch(fetchImpl, t.base + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.LLM_API_KEY },
-        body: JSON.stringify({ model: t.model, messages: [{ role: 'user', content: 'Reply with the single word: ok' }], ...(t.isGemini ? { reasoning_effort: 'low' } : {}) }),
-      });
+      const r = await askLLM(env, { messages: [{ role: 'user', content: 'Reply with the single word: ok' }] }, fetchImpl);
       let reply = '';
       let error = '';
       try {
-        const j = JSON.parse(r.text);
+        let j = JSON.parse(r.text);
+        if (Array.isArray(j)) j = j[0];
         reply = j?.choices?.[0]?.message?.content || '';
-        error = j?.error?.message || (Array.isArray(j) ? j[0]?.error?.message : '') || '';
+        error = j?.error?.message || '';
       } catch {
         error = r.text.slice(0, 200);
       }
-      info.test = { status: r.status, ms: Date.now() - started, reply: String(reply).slice(0, 60), error: String(error).slice(0, 300) };
-    } catch (e) {
-      info.test = { status: 0, ms: Date.now() - started, error: e.name === 'AbortError' ? 'AI service did not answer in time' : 'could not reach the AI service' };
+      info.test = { status: r.status, ms: Date.now() - started, model: r.model, reply: String(reply).slice(0, 60), error: String(error).slice(0, 300) };
+    } catch {
+      info.test = { status: 0, ms: Date.now() - started, error: 'could not reach the AI service' };
     }
   }
   // /api/health?models=1 lists the model names this key can use.
@@ -97,29 +127,20 @@ export async function chat(request, env, fetchImpl = fetch) {
     return json({ error: e.message }, e.status || 400);
   }
   if (!Array.isArray(body.messages)) return json({ error: 'messages is required' }, 400);
-  const t = llmTarget(env);
-  const upstream = {
-    model: env.LLM_MODEL || body.model || t.model,
-    messages: body.messages,
-    temperature: typeof body.temperature === 'number' ? body.temperature : 0.6,
-  };
-  if (t.isGemini) upstream.reasoning_effort = 'low'; // a voice reply must come back in a second or two
+  const upstream = { messages: body.messages, temperature: typeof body.temperature === 'number' ? body.temperature : 0.6 };
+  if (body.model) upstream.model = body.model;
   if (Array.isArray(body.tools) && body.tools.length) {
     upstream.tools = body.tools;
     upstream.tool_choice = body.tool_choice || 'auto';
   }
   let r;
   try {
-    r = await timedFetch(fetchImpl, t.base + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.LLM_API_KEY },
-      body: JSON.stringify(upstream),
-    });
-  } catch (e) {
-    return e.name === 'AbortError' ? json({ error: 'The AI service did not answer in time' }, 504) : json({ error: 'Could not reach the AI service' }, 502);
+    r = await askLLM(env, upstream, fetchImpl);
+  } catch {
+    return json({ error: 'Could not reach the AI service' }, 502);
   }
   if (r.status >= 400) console.error('AI service error', r.status, r.text.slice(0, 300));
-  return new Response(r.text, { status: r.status, headers: { 'Content-Type': r.type, 'Cache-Control': 'no-store' } });
+  return new Response(r.text, { status: r.status, headers: { 'Content-Type': r.type, 'Cache-Control': 'no-store', 'x-g1-model': r.model } });
 }
 
 export async function tts(request, env, fetchImpl = fetch) {

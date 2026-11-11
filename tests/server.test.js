@@ -62,3 +62,24 @@ test('speak validates input and returns audio', async () => {
   assert.equal((await tts(post('/api/speak', { text: 'hello', voice_id: '../x' }), ENV, audio)).status, 400);
   assert.equal((await tts(post('/api/speak', { text: ' ', voice_id: 'iLrek0aeAREetkK9NhwJ' }), ENV, audio)).status, 400);
 });
+
+test('when the first Gemini model is overloaded or slow, the next one answers', async () => {
+  const tried = [];
+  const flaky = async (url, init) => {
+    const body = JSON.parse(init.body);
+    tried.push(body.model);
+    if (body.model === 'gemini-3.8-flash') return new Response(JSON.stringify([{ error: { message: 'high demand' } }]), { status: 503 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { headers: { 'content-type': 'application/json' } });
+  };
+  const res = await chat(post('/api/llm', { messages: [{ role: 'user', content: 'hi' }] }), ENV, flaky);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-g1-model'), 'gemini-3.5-flash');
+  assert.deepEqual(tried, ['gemini-3.8-flash', 'gemini-3.5-flash']);
+  const j = await (await health(new Request('http://x/api/health?test=1'), ENV, flaky)).json();
+  assert.equal(j.test.model, 'gemini-3.5-flash');
+  // a bad key is not retried on other models
+  tried.length = 0;
+  const bad = await chat(post('/api/llm', { messages: [] }), ENV, async (u, init) => (tried.push(JSON.parse(init.body).model), new Response('{"error":{"message":"bad key"}}', { status: 400 })));
+  assert.equal(bad.status, 400);
+  assert.equal(tried.length, 1);
+});
