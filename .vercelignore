@@ -1,0 +1,10 @@
+# Vercel hosts only the G1 app (public/) and its small key server (api/, server/).
+# G1 Core (Python) and the hardware files run elsewhere.
+g1
+hardware
+scripts
+tests
+docs
+requirements.txt
+requirements-device.txt
+server.mjs
