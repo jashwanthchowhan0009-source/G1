@@ -198,6 +198,14 @@ export function parseIntent(raw, { now = new Date() } = {}) {
     return { tool: 'travel_search', args: { kind, from: fromTo ? fromTo[1].trim() : '', to: to.replace(/\s+for \d+ (?:nights?|raat).*$/, '').replace(/\s+\d+ (?:nights?|raat).*$/, '').trim(), date: when ? localDate(when.date) : '', nights: nightsOf(t) } };
   }
 
+  // ---- share to other apps
+  if ((m = /^(?:share|post)\s+(.+?)\s+(?:on|to|in)\s+(instagram|insta|facebook|fb|whatsapp status|whatsapp)$/.exec(t)) || (m = /^(instagram|insta|facebook|fb)\s+(?:pe|par)\s+(?:post|share)\s+(?:karo|kar do)\s*(?:ki)?\s*(.+)$/.exec(t))) {
+    const first = /^(instagram|insta|facebook|fb)$/.test(m[1]);
+    const app = (first ? m[1] : m[2]).replace('insta', 'instagram').replace('instagramgram', 'instagram').replace(/^fb$/, 'facebook').replace(' status', '');
+    const text = first ? m[2] : m[1];
+    if (!/^(it|this|that|the video|video)$/.test(text)) return { tool: 'share', args: { text, app } };
+  }
+
   // ---- making and posting videos (G1 Core)
   if ((m = /^(?:make|create|generate)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:short\s+)?(?:video|reel|short)\s+(?:about|on|for)\s+(.+)$/.exec(t)) || (m = /^(.+?)\s+(?:pe|par|ke baare mein|ke upar)\s+(?:ek\s+)?(?:video|reel)\s+(?:banao|bana do|banado|bana)$/.exec(t))) {
     return { tool: 'make_video', args: { title: m[1] } };

@@ -9,7 +9,7 @@ import { createBrain } from '../public/js/core/brain.js';
 // Tuesday 10 Nov 2026, 10:00 local time
 export const NOW = new Date(2026, 10, 10, 10, 0, 0);
 
-export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NOW, core = null } = {}) {
+export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NOW, core = null, phone = null } = {}) {
   const mem = new Map();
   const store = createStore({ getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) });
   const settings = createSettings(store);
@@ -47,6 +47,10 @@ export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NO
       torch: async () => {},
       capturePhoto: async () => 'data:image/jpeg;base64,AAAA',
       savePhoto: () => {},
+      // set when the test plays the Android app
+      deviceContacts: () => phone?.contacts || [],
+      share: (text, app) => (phone ? (phone.shared.push({ text, app }), 'opened') : 'blocked'),
+      setAlarm: (h, m, label) => (phone ? (phone.alarms.push({ h, m, label }), true) : false),
     },
     vision: llm ? (img, q) => llm.see(img, q) : null,
     core,

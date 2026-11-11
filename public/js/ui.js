@@ -154,6 +154,13 @@ export function createCardView(root, handlers) {
         root.append(el('h3', '', card.title));
         if (card.text) root.append(el('p', '', card.text));
         if (card.url) root.append(link(card));
+      } else if (card.type === 'share') {
+        const b = el('button', 'primary', card.label || 'Share');
+        b.type = 'button';
+        b.onclick = () => navigator.share?.({ text: card.text }).catch(() => {});
+        const row = el('div', 'row');
+        row.append(b);
+        root.append(el('h3', '', card.title), el('p', 'quote', card.text), row);
       } else if (card.type === 'photo') {
         const img = el('img');
         img.src = card.src;

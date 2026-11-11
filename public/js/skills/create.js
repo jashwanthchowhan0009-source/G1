@@ -16,6 +16,33 @@ function draftScenes(topic) {
 
 export const createSkills_ = [
   {
+    name: 'share',
+    description: 'Share or post text through another app: Instagram, Facebook, WhatsApp status, or any app from the share sheet. The device asks the user to confirm, and the user finishes the post inside that app.',
+    parameters: {
+      type: 'object',
+      properties: { text: { type: 'string', description: 'What to share' }, app: { type: 'string', enum: ['instagram', 'facebook', 'whatsapp', 'any'] } },
+      required: ['text'],
+    },
+    run(args, ctx) {
+      const text = String(args.text || '').trim();
+      if (!text) return ask(ctx, 'What should I share?', 'Kya share karna hai?');
+      const app = ['instagram', 'facebook', 'whatsapp'].includes(args.app) ? args.app : '';
+      const where = app ? app.replace(/^\w/, (c) => c.toUpperCase()) : L(ctx, 'another app', 'doosre app');
+      return {
+        confirm: {
+          say: L(ctx, `Share "${text}" on ${where}?`, `"${text}" ${where} pe share karu?`),
+          card: { type: 'confirm', title: L(ctx, `Share on ${where}`, `${where} pe share`), text },
+          proceed: () => {
+            const result = ctx.platform.share?.(text, app) || 'blocked';
+            if (result === 'opened') return { ok: true, say: L(ctx, `${where} is open with it. Finish the post there.`, `${where} khul gaya. Wahan post poora kar do.`), data: { shared_to: app || 'share sheet' } };
+            if (result === 'needs-tap') return { ok: true, say: L(ctx, 'Tap share to pick the app.', 'App chunne ke liye share dabao.'), data: { needs_tap: true }, card: { type: 'share', title: L(ctx, 'Share', 'Share'), text, label: L(ctx, 'Share', 'Share karo') } };
+            return fail(ctx, "This device can't share from here. Install the G1 Android app.", 'Yahan se share nahi ho sakta. G1 Android app install karo.', { error: 'share_unavailable' });
+          },
+        },
+      };
+    },
+  },
+  {
     name: 'make_video',
     description: 'Make a short vertical video (Reels/Shorts) with voice-over. Write 3 to 6 short scenes yourself, one sentence each, then call this.',
     parameters: {

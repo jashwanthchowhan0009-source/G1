@@ -136,6 +136,13 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .sheet input[type="range"] { accent-color: var(--white); width: 100%; }
 .sheet .check { display: flex; align-items: center; gap: 10px; font-size: 16px; }
 .sheet .check input { width: 22px; height: 22px; accent-color: var(--black); }
+.conn { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, .2); }
+.conn:first-child { border-top: 0; }
+.conn b { display: block; font-size: 16px; }
+.conn span { font-size: 13px; }
+.conn button, .conn em { flex: 0 0 auto; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-style: normal; font-size: 14px; }
+.conn button { border: 0; background: var(--white); color: var(--navy); }
+.conn em { background: var(--black); }
 .sheet .help { font-size: 14px; }
 .sheet-foot { position: sticky; bottom: 0; padding: 14px 0 0; background: linear-gradient(transparent, var(--navy) 35%); display: grid; }
 

@@ -208,8 +208,12 @@ export const lifeSkills = [
       if (Number.isNaN(when.getTime())) return ask(ctx, 'I missed the time. When?', 'Time samajh nahi aaya. Kab?');
       if (when.getTime() <= now.getTime()) return ask(ctx, 'That time has already passed. When should it be?', 'Yeh time nikal chuka hai. Kab rakhu?');
       if (kind === 'reminder' && !text) return ask(ctx, 'What should I remind you about?', 'Kis cheez ka reminder?');
-      const item = ctx.scheduler.add({ kind, at: when.getTime(), text });
       const at = sayWhen(when, now, lang(ctx));
+      // In the Android app an alarm within a day goes to the phone's clock, so it rings even when G1 is closed.
+      if (kind === 'alarm' && when.getTime() - now.getTime() < 23.5 * 3600000 && ctx.platform.setAlarm?.(when.getHours(), when.getMinutes(), text)) {
+        return { ok: true, say: L(ctx, `Alarm set for ${at}.`, `Alarm lag gaya, ${at}.`), data: { kind, when: when.toISOString(), note: 'Set in the phone clock app.' }, card: { type: 'list', title: L(ctx, 'Alarm', 'Alarm'), items: [`${text || 'Alarm'}, ${at}`] } };
+      }
+      const item = ctx.scheduler.add({ kind, at: when.getTime(), text });
       const say =
         kind === 'alarm'
           ? L(ctx, `Alarm set for ${at}.`, `Alarm lag gaya, ${at}.`)

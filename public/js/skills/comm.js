@@ -31,7 +31,10 @@ export function resolveContact(ctx, query) {
   const q = norm(query).replace(/^(my|mere|meri|mera|apne|apni)\s+/, '');
   if (!q) return { none: true };
   if (looksLikeNumber(query)) return { contact: { name: String(query).trim(), phone: digits(query), adhoc: true } };
-  const list = contacts(ctx);
+  const mine = contacts(ctx);
+  const taken = new Set(mine.map((c) => norm(c.name)));
+  const phone = (ctx.platform.deviceContacts?.() || []).filter((c) => !taken.has(norm(c.name))).map((c) => ({ ...c, aliases: [], fromPhone: true }));
+  const list = [...mine, ...phone];
   const names = (c) => [c.name, ...(c.aliases || [])].map(norm);
   const exact = list.filter((c) => names(c).includes(q));
   if (exact.length === 1) return { contact: exact[0] };
@@ -114,6 +117,8 @@ export const commSkills = [
     run(args, ctx) {
       const list = contacts(ctx);
       if (!args.name) {
+        const onPhone = (ctx.platform.deviceContacts?.() || []).length;
+        if (!list.length && onPhone) return { ok: true, say: L(ctx, `I can see ${onPhone} contacts on your phone. Just say a name.`, `Phone mein ${onPhone} contacts dikh rahe hain. Bas naam bolo.`), data: { phone_contacts: onPhone } };
         if (!list.length) return fail(ctx, 'No contacts saved yet.', 'Abhi koi contact saved nahi hai.', { contacts: [] });
         const names = list.map((c) => c.name);
         return {

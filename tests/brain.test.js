@@ -173,7 +173,7 @@ test('AI mode: the model calls tools, gets results back, and its words are spoke
   // first request: system prompt, tools, user turn
   assert.match(llm.seen[0].system, /You are G1/);
   assert.match(llm.seen[0].system, /Jashwanth/);
-  assert.ok(llm.seen[0].tools.length >= 35);
+  assert.ok(llm.seen[0].tools.length >= 38);
   assert.equal(llm.seen[0].messages.at(-1).content, 'Hyderabad lo weather ela undi?');
   // second request carries the assistant tool call untouched and the tool result
   const [, second] = llm.seen;
@@ -350,4 +350,42 @@ test('hotels with dates open real availability for those nights', async () => {
   const g = makeG1();
   await g.brain.handle('find a hotel in goa for 2 nights tomorrow');
   assert.equal(g.opened.at(-1), 'https://www.booking.com/searchresults.html?ss=goa&checkin=2026-11-11&checkout=2026-11-13&group_adults=2&no_rooms=1');
+});
+
+test('Android app: the phone address book, clock alarms and sharing', async () => {
+  const phone = { contacts: [{ name: 'Papa', phone: '+919876543210' }, { name: 'Ravi Teja', phone: '9000000002' }], shared: [], alarms: [] };
+  const g = makeG1({ phone });
+  // no saving needed: names come from the phone
+  let r = await g.brain.handle('papa ko call karo');
+  assert.match(r.say, /Calling Papa/);
+  assert.equal(g.opened.at(-1), 'tel:+919876543210');
+  r = await g.brain.handle('tell ravi that i am outside');
+  assert.match(r.say, /WhatsApp to Ravi Teja/);
+  await g.brain.handle('yes');
+  assert.equal(g.opened.at(-1), 'https://wa.me/919000000002?text=i%20am%20outside');
+  // a contact saved in G1 wins over the phone's entry with the same name
+  await g.brain.handle('save papa number 9111111111');
+  await g.brain.handle('call papa');
+  assert.equal(g.opened.at(-1), 'tel:+919111111111');
+  // alarms go to the phone clock; reminders stay with G1
+  r = await g.brain.handle('wake me up at 6 am');
+  assert.match(r.say, /Alarm set for tomorrow at 6 AM/);
+  assert.deepEqual(phone.alarms, [{ h: 6, m: 0, label: '' }]);
+  assert.equal(g.scheduler.list().length, 0);
+  // sharing waits for a yes, then opens the app
+  r = await g.brain.handle('share happy diwali to everyone on instagram');
+  assert.match(r.say, /Share "happy diwali to everyone" on Instagram\?/);
+  assert.equal(phone.shared.length, 0);
+  r = await g.brain.handle('haan');
+  assert.deepEqual(phone.shared, [{ text: 'happy diwali to everyone', app: 'instagram' }]);
+  assert.match(r.say, /Instagram is open/);
+});
+
+test('in a browser, sharing and phone contacts are honestly unavailable', async () => {
+  const g = makeG1();
+  let r = await g.brain.handle('call papa');
+  assert.match(r.say, /don't have papa saved/);
+  await g.brain.handle('post good morning on facebook');
+  r = await g.brain.handle('yes');
+  assert.match(r.say, /Install the G1 Android app/);
 });

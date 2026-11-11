@@ -1,0 +1,39 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build the APK
+        run: gradle -p android assembleDebug --no-daemon --stacktrace
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk G1.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: G1-apk
+          path: G1.apk
+      - name: Publish as the latest APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: G1 Android app (latest build)
+          body: Install G1.apk on an Android phone (8.0 or newer). Allow "install unknown apps" for your browser when asked.
+          files: G1.apk
+          make_latest: true

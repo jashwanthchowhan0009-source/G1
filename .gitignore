@@ -6,3 +6,7 @@ __pycache__/
 .pytest_cache/
 node_modules/
 tests/browser/out/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

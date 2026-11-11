@@ -1,6 +1,101 @@
 // G1's ears: the browser's speech recognition, one utterance at a time or hands-free.
 
+import { has, nativeCall, onNative } from '../native.js';
+
+/** Inside the G1 Android app: the phone's own speech recognition. Same interface as the browser ears. */
+function createNativeEars({ settings, onInterim, onFinal, onState, onError }) {
+  let mode = 'off';
+  let paused = false;
+  let active = false;
+  let cancelled = false;
+  let failures = 0;
+  let heard = '';
+  let timer = null;
+
+  const start = () => {
+    if (paused || active) return;
+    cancelled = false;
+    heard = '';
+    active = true;
+    nativeCall('listen', settings.get().language);
+  };
+  const halt = () => {
+    clearTimeout(timer);
+    cancelled = true;
+    active = false;
+    nativeCall('stopListening', false);
+  };
+
+  onNative('speech', (e) => {
+    if (cancelled) return;
+    if (e.kind === 'start') onState(true);
+    else if (e.kind === 'partial') {
+      heard = e.text;
+      onInterim(e.text);
+    } else if (e.kind === 'final') heard = e.text || heard;
+    else if (e.kind === 'error') {
+      if (e.text === 'mic-blocked' || e.text === 'unsupported') {
+        mode = 'off';
+        onError(e.text);
+      } else if (e.text === 'no-network') {
+        failures++;
+        onError('no-network');
+      }
+    } else if (e.kind === 'end') {
+      active = false;
+      const text = heard.trim();
+      heard = '';
+      const was = mode;
+      if (mode === 'once') mode = 'off';
+      onState(false);
+      if (text) {
+        failures = 0;
+        onFinal(text, { handsfree: was === 'handsfree' });
+      }
+      if (mode === 'handsfree' && !paused) {
+        if (failures < 4) timer = setTimeout(start, 300 + failures * 1500);
+        else {
+          mode = 'off';
+          onError('handsfree-stopped');
+        }
+      }
+    }
+  });
+
+  return {
+    supported: true,
+    isListening: () => active,
+    mode: () => mode,
+    listenOnce() {
+      paused = false;
+      if (mode !== 'handsfree') mode = 'once';
+      start();
+    },
+    finish: () => nativeCall('stopListening', true),
+    startHandsfree() {
+      mode = 'handsfree';
+      paused = false;
+      failures = 0;
+      start();
+    },
+    stopHandsfree() {
+      mode = 'off';
+      halt();
+      onState(false);
+    },
+    pause() {
+      paused = true;
+      halt();
+    },
+    resume() {
+      paused = false;
+      if (mode === 'handsfree') start();
+    },
+  };
+}
+
 export function createEars({ settings, onInterim = () => {}, onFinal = () => {}, onState = () => {}, onError = () => {} }) {
+  if (has('listen')) return createNativeEars({ settings, onInterim, onFinal, onState, onError });
   const SR = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
   let rec = null;
   let mode = 'off'; // 'off' | 'once' | 'handsfree'

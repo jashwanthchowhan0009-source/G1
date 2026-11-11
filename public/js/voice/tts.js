@@ -1,6 +1,7 @@
 // G1's voice. Natural voice (ElevenLabs) when a key or server is available, the device's best voice otherwise.
 
 import { VOICE_PRESETS } from '../core/settings.js';
+import { has, nativeCall, onNative } from '../native.js';
 
 const ELEVEN = 'https://api.elevenlabs.io/v1/text-to-speech';
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
@@ -99,6 +100,21 @@ export function createVoice({ settings, getServer = () => ({}), fetch: fetchImpl
   }
 
   function speakOnDevice(text, mine) {
+    if (has('speak')) {
+      // Android app: the phone's own voice engine
+      return new Promise((resolve) => {
+        if (mine !== token) return resolve();
+        let off = () => {};
+        const done = () => {
+          off();
+          clearTimeout(guard);
+          resolve();
+        };
+        const guard = setTimeout(done, 25000);
+        off = onNative('tts', done);
+        nativeCall('speak', text, cfg().language, cfg().tts.rate || 1);
+      });
+    }
     return new Promise((resolve) => {
       if (!synth || mine !== token) return resolve();
       const u = new SpeechSynthesisUtterance(text);
@@ -169,6 +185,7 @@ export function createVoice({ settings, getServer = () => ({}), fetch: fetchImpl
 
     stop() {
       token++;
+      nativeCall('stopSpeaking');
       try {
         synth?.cancel();
         audio?.pause();

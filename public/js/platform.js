@@ -1,6 +1,8 @@
 // What G1 can do on the device it is running on. This file is the only place that touches
 // browser device APIs, so a native Android shell can replace it later (see window.G1Native).
 
+import { has, nativeCall, nativeJson } from './native.js';
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function createPlatform() {
@@ -12,12 +14,8 @@ export function createPlatform() {
      * Returns 'placed' (done with no tap, native shell only), 'opened', or 'blocked'.
      */
     open(url) {
-      try {
-        const native = globalThis.G1Native?.open?.(url);
-        if (native) return native;
-      } catch {
-        /* fall through to the browser way */
-      }
+      const done = nativeCall('open', url);
+      if (done) return done;
       if (/^https?:/i.test(url)) {
         const w = window.open(url, '_blank');
         if (!w) return 'blocked';
@@ -31,6 +29,36 @@ export function createPlatform() {
       window.location.href = url;
       return 'opened';
     },
+
+    /** True inside the G1 Android app. */
+    isApp: () => has('permissions'),
+
+    /** The phone's address book (Android app, with permission). [] elsewhere. */
+    deviceContacts() {
+      if (!has('contacts')) return [];
+      const now = Date.now();
+      if (!this._contacts || now - this._contactsAt > 60000) {
+        this._contacts = nativeJson('contacts', []);
+        this._contactsAt = now;
+      }
+      return this._contacts;
+    },
+
+    /** { microphone: true, contacts: false, ... } in the Android app, null in a browser. */
+    permissions: () => (has('permissions') ? nativeJson('permissions', {}) : null),
+    requestPermission(name) {
+      this._contacts = null;
+      nativeCall('request', name);
+    },
+
+    /** Share text through Android's share sheet or a named app. Returns 'opened', 'blocked' or 'needs-tap'. */
+    share(text, app = '') {
+      if (has('share')) return nativeCall('share', text, app) || 'blocked';
+      return navigator.share ? 'needs-tap' : 'blocked';
+    },
+
+    /** A real alarm in the phone's clock app. False when G1 cannot set one here. */
+    setAlarm: (hour, minute, label) => (has('setAlarm') ? Boolean(nativeCall('setAlarm', hour, minute, label || '')) : false),
 
     geolocate() {
       return new Promise((resolve, reject) => {

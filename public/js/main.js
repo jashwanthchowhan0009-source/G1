@@ -13,6 +13,7 @@ import { createPlatform } from './platform.js';
 import { createVoice } from './voice/tts.js';
 import { createEars } from './voice/stt.js';
 import { createBloom, createCardView } from './ui.js';
+import { onNative } from './native.js';
 
 const $ = (id) => document.getElementById(id);
 const screen = $('screen');
@@ -323,10 +324,55 @@ function readSettings() {
     tts: { elevenKey: f.elevenKey.value.trim(), preset: f.preset.value, voiceId: '', browserVoice: f.browserVoice.value, rate: Number(f.rate.value) || 1 },
   };
 }
+// Connections: what G1 may use on this phone. Each one is Android's own permission, asked once.
+const CONNECTIONS = [
+  ['microphone', 'Microphone', 'So G1 can hear you'],
+  ['contacts', 'Contacts', 'Call and message people by name'],
+  ['calls', 'Phone calls', 'Place calls for you'],
+  ['sms', 'SMS', 'Send texts, only after you say yes'],
+  ['camera', 'Camera', 'Photos and "what is this?"'],
+  ['location', 'Location', 'Weather, directions, places near you'],
+  ['notifications', 'Notifications', 'Reminders when the screen is off'],
+];
+function fillConnections() {
+  const state = platform.permissions();
+  const list = $('connList');
+  list.replaceChildren();
+  if (!state) {
+    $('connHelp').textContent = 'In a browser G1 asks for the microphone, camera and location when it needs them. For contacts, calls, SMS and alarms that ring when G1 is closed, install the G1 Android app.';
+    return;
+  }
+  $('connHelp').textContent = 'Nothing is sent, paid or posted without your yes. Contacts stay on this phone.';
+  for (const [key, title, why] of CONNECTIONS) {
+    const row = document.createElement('div');
+    row.className = 'conn';
+    const text = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = title;
+    const sub = document.createElement('span');
+    sub.textContent = why;
+    text.append(b, sub);
+    let action;
+    if (state[key]) {
+      action = document.createElement('em');
+      action.textContent = 'On';
+    } else {
+      action = document.createElement('button');
+      action.type = 'button';
+      action.textContent = 'Allow';
+      action.onclick = () => platform.requestPermission(key);
+    }
+    row.append(text, action);
+    list.append(row);
+  }
+}
+onNative('permissions', () => $('settings').open && fillConnections());
+
 $('gear').addEventListener('click', () => {
   voice.stop();
   ears.pause();
   fillSettings();
+  fillConnections();
   $('settings').show();
 });
 form.elements.provider.addEventListener('change', (e) => (form.querySelector('[data-only="custom"]').hidden = e.target.value !== 'custom'));
