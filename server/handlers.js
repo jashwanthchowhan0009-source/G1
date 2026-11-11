@@ -12,6 +12,26 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const MAX_BODY = 6 * 1024 * 1024; // room for one camera photo
 const MAX_SPEECH_CHARS = 1200;
 
+const UPSTREAM_TIMEOUT_MS = 25000;
+
+/** fetch with a deadline, so a slow AI service gives a clear error instead of a hung request. */
+async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetchImpl(url, { ...init, signal: ctrl.signal });
+    const text = await res.text(); // read fully inside the deadline
+    return { status: res.status, type: res.headers.get('content-type') || 'application/json', text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function llmTarget(env) {
+  const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
+  return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.8-flash' };
+}
+
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
 function locked(request, env) {
@@ -28,8 +48,33 @@ async function readJson(request) {
   }
 }
 
-export function health(_request, env) {
-  return json({ ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.8-flash' });
+export async function health(request, env, fetchImpl = fetch) {
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.8-flash' };
+  // /api/health?test=1 makes one tiny AI call and reports how it went (never the key).
+  if (new URL(request.url).searchParams.get('test') && env.LLM_API_KEY && !locked(request, env)) {
+    const t = llmTarget(env);
+    const started = Date.now();
+    try {
+      const r = await timedFetch(fetchImpl, t.base + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.LLM_API_KEY },
+        body: JSON.stringify({ model: t.model, messages: [{ role: 'user', content: 'Reply with the single word: ok' }], ...(t.isGemini ? { reasoning_effort: 'low' } : {}) }),
+      });
+      let reply = '';
+      let error = '';
+      try {
+        const j = JSON.parse(r.text);
+        reply = j?.choices?.[0]?.message?.content || '';
+        error = j?.error?.message || (Array.isArray(j) ? j[0]?.error?.message : '') || '';
+      } catch {
+        error = r.text.slice(0, 200);
+      }
+      info.test = { status: r.status, ms: Date.now() - started, reply: String(reply).slice(0, 60), error: String(error).slice(0, 300) };
+    } catch (e) {
+      info.test = { status: 0, ms: Date.now() - started, error: e.name === 'AbortError' ? 'AI service did not answer in time' : 'could not reach the AI service' };
+    }
+  }
+  return json(info);
 }
 
 export async function chat(request, env, fetchImpl = fetch) {
@@ -43,27 +88,29 @@ export async function chat(request, env, fetchImpl = fetch) {
     return json({ error: e.message }, e.status || 400);
   }
   if (!Array.isArray(body.messages)) return json({ error: 'messages is required' }, 400);
+  const t = llmTarget(env);
   const upstream = {
-    model: env.LLM_MODEL || body.model || 'gemini-3.8-flash',
+    model: env.LLM_MODEL || body.model || t.model,
     messages: body.messages,
     temperature: typeof body.temperature === 'number' ? body.temperature : 0.6,
   };
+  if (t.isGemini) upstream.reasoning_effort = 'low'; // a voice reply must come back in a second or two
   if (Array.isArray(body.tools) && body.tools.length) {
     upstream.tools = body.tools;
     upstream.tool_choice = body.tool_choice || 'auto';
   }
-  const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
-  let res;
+  let r;
   try {
-    res = await fetchImpl(base + '/chat/completions', {
+    r = await timedFetch(fetchImpl, t.base + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.LLM_API_KEY },
       body: JSON.stringify(upstream),
     });
-  } catch {
-    return json({ error: 'Could not reach the AI service' }, 502);
+  } catch (e) {
+    return e.name === 'AbortError' ? json({ error: 'The AI service did not answer in time' }, 504) : json({ error: 'Could not reach the AI service' }, 502);
   }
-  return new Response(res.body, { status: res.status, headers: { 'Content-Type': res.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' } });
+  if (r.status >= 400) console.error('AI service error', r.status, r.text.slice(0, 300));
+  return new Response(r.text, { status: r.status, headers: { 'Content-Type': r.type, 'Cache-Control': 'no-store' } });
 }
 
 export async function tts(request, env, fetchImpl = fetch) {

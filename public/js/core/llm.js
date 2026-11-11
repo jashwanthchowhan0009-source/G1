@@ -1,6 +1,6 @@
 // Chat client for any OpenAI-compatible endpoint (Gemini, Groq, OpenAI, a local model, or G1's own /api/chat proxy).
 
-export function createLLM({ url, headers = {}, model = '', fetch: fetchImpl = globalThis.fetch, timeout = 30000 }) {
+export function createLLM({ url, headers = {}, model = '', fetch: fetchImpl = globalThis.fetch, timeout = 40000 }) {
   async function post(body) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -20,7 +20,8 @@ export function createLLM({ url, headers = {}, model = '', fetch: fetchImpl = gl
     if (!res.ok) {
       let detail = '';
       try {
-        const j = await res.json();
+        let j = await res.json();
+        if (Array.isArray(j)) j = j[0];
         detail = j?.error?.message || j?.error || j?.message || '';
         if (typeof detail !== 'string') detail = JSON.stringify(detail);
       } catch {
