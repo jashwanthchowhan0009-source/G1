@@ -18,6 +18,18 @@ android {
         versionName = "0.1.0"
         buildConfigField("String", "G1_URL", "\"$g1Url\"")
     }
+    // Same key on every build, so a new APK installs over the old one.
+    // Set GitHub secrets G1_KEYSTORE_B64 (base64 .jks) and G1_KEYSTORE_PASS; without them the debug key is used.
+    val ks = System.getenv("G1_KEYSTORE_FILE")
+    if (!ks.isNullOrBlank()) {
+        signingConfigs.create("g1") {
+            storeFile = file(ks)
+            storePassword = System.getenv("G1_KEYSTORE_PASS")
+            keyAlias = "g1"
+            keyPassword = System.getenv("G1_KEYSTORE_PASS")
+        }
+        buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("g1")
+    }
     buildFeatures { buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

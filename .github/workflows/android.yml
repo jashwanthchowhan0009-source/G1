@@ -21,7 +21,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Signing key (optional)
+        env:
+          KS: ${{ secrets.G1_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/g1.jks"; echo "G1_KEYSTORE_FILE=$RUNNER_TEMP/g1.jks" >> "$GITHUB_ENV"; fi
       - name: Build the APK
+        env:
+          G1_KEYSTORE_PASS: ${{ secrets.G1_KEYSTORE_PASS }}
         run: gradle -p android assembleDebug --no-daemon --stacktrace
       - name: Name the APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk G1.apk

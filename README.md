@@ -28,6 +28,21 @@
 | `hardware/devkit/` | G1 Dev Kit v0: Raspberry Pi 5 build, parts list, wiring, case | Hand-built |
 | `hardware/PRODUCTION.md` | Path from dev kit to a certified phone | |
 
+## Android app (the real G1)
+**Install:** on an Android phone (8.0+) open https://github.com/jashwanthchowhan0009-source/G1/releases/download/apk-latest/G1.apk, allow "install unknown apps" for the browser, install.
+
+Then in G1: **Settings → Connections → Allow** for Microphone, Contacts, Calls, SMS, Camera, Location, Notifications. Optional: set G1 as the home screen (Android Settings → Apps → Default apps → Home app).
+
+| With the app | |
+|---|---|
+| Contacts | Names come from the phone's address book |
+| Calls, SMS | Placed and sent by G1 after your "haan", no extra tap |
+| WhatsApp | Opens straight in WhatsApp with the message; you tap send |
+| Instagram, Facebook | "Share ... on Instagram" opens the app with the text |
+| Alarms | Set in the phone's clock, ring even when G1 is closed |
+
+Every push to `android/` rebuilds the APK (GitHub Actions). To keep one signing key across builds, so updates install over the old app, add repo secrets `G1_KEYSTORE_B64` (base64 of a `.jks` with alias `g1`) and `G1_KEYSTORE_PASS`. Until then, uninstall the old G1 before installing a new build.
+
 ## Try it
 **1. The app alone (works with no keys):**
 ```bash
