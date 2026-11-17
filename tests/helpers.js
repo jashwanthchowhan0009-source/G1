@@ -9,7 +9,7 @@ import { createBrain } from '../public/js/core/brain.js';
 // Tuesday 10 Nov 2026, 10:00 local time
 export const NOW = new Date(2026, 10, 10, 10, 0, 0);
 
-export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NOW, core = null, phone = null } = {}) {
+export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NOW, core = null, phone = null, server = {} } = {}) {
   const mem = new Map();
   const store = createStore({ getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) });
   const settings = createSettings(store);
@@ -54,6 +54,7 @@ export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NO
     },
     vision: llm ? (img, q) => llm.see(img, q) : null,
     core,
+    server: () => server,
   };
   const skills = createSkills();
   const brain = createBrain({ skills, ctx, getLLM: () => llm, timeZone: 'Asia/Kolkata' });

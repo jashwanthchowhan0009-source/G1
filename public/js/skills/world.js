@@ -69,7 +69,61 @@ function openLink(ctx, url, title, label, text = '') {
   return { opened: result !== 'blocked', card: { type: 'action', title, text, label, url } };
 }
 
+/** Live web search through the G1 server. Returns the server's answer, or null when search is not set up. */
+async function serverPost(ctx, path, body) {
+  if (!ctx.server?.()?.search) return null;
+  const pass = ctx.settings.get().passcode;
+  const res = await ctx.fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(pass ? { 'x-g1-pass': pass } : {}) }, body: JSON.stringify(body) });
+  return res.json();
+}
+
+const firstSentences = (t, n = 2) => String(t || '').split(/(?<=[.!?।])\s+/).slice(0, n).join(' ');
+
+async function liveSearch(ctx, q) {
+  let r;
+  try {
+    r = await serverPost(ctx, '/api/search', { query: q });
+  } catch {
+    return fail(ctx, "I can't reach the internet right now.", 'Abhi internet tak nahi pahunch pa raha.', { error: 'network' });
+  }
+  if (!r) return null;
+  if (!r.ok) return fail(ctx, "I couldn't search that right now.", 'Abhi yeh search nahi ho paya.', { error: r.error || 'search_failed' });
+  const top = r.results?.[0] || r.sources?.[0];
+  return {
+    ok: true,
+    say: r.answer ? firstSentences(r.answer) : L(ctx, `Top result: ${top?.title}.`, `Sabse upar: ${top?.title}.`),
+    data: { answer: r.answer || '', results: r.results || r.sources || [] },
+    card: top ? { type: 'info', title: top.title, text: top.snippet || '', label: L(ctx, 'Open', 'Kholo'), url: top.url } : undefined,
+  };
+}
+
 export const worldSkills = [
+  {
+    name: 'web_search',
+    description: 'Search the live web: prices, availability, timings, news, comparisons, reviews, phone numbers. Use for anything current instead of guessing.',
+    parameters: { type: 'object', properties: { query: { type: 'string', description: 'Specific question with place and date if relevant' } }, required: ['query'] },
+    async run(args, ctx) {
+      const q = String(args.query || '').trim();
+      if (!q) return ask(ctx, 'What should I search for?', 'Kya search karu?');
+      return (await liveSearch(ctx, q)) || fail(ctx, 'Web search is not set up on this G1 yet.', 'Is G1 pe web search abhi set nahi hai.', { error: 'search_unavailable' });
+    },
+  },
+  {
+    name: 'read_page',
+    description: 'Open one web page and read its text, e.g. a link from web_search, to check prices or details.',
+    parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+    async run(args, ctx) {
+      let r;
+      try {
+        r = await serverPost(ctx, '/api/read', { url: String(args.url || '') });
+      } catch {
+        r = { ok: false, error: 'network' };
+      }
+      if (!r) return fail(ctx, 'Reading pages is not set up on this G1 yet.', 'Page padhna abhi set nahi hai.', { error: 'read_unavailable' });
+      if (!r.ok) return fail(ctx, "I couldn't open that page.", 'Woh page nahi khula.', { error: r.error });
+      return { ok: true, say: L(ctx, 'Read it.', 'Padh liya.'), data: { url: r.url, text: r.text } };
+    },
+  },
   {
     name: 'get_weather',
     description: 'Current weather and the forecast for today or tomorrow. Without a place it uses where the user is.',
@@ -222,6 +276,8 @@ export const worldSkills = [
       const q = String(args.query || '').trim();
       if (!q) return ask(ctx, 'What should I look up?', 'Kya dhundna hai?');
       const searchUrl = `https://www.google.com/search?q=${enc(q)}`;
+      const live = await liveSearch(ctx, q).catch(() => null);
+      if (live?.ok) return live;
       try {
         const found = await getJson(ctx, `https://en.wikipedia.org/w/api.php?action=opensearch&search=${enc(q)}&limit=1&namespace=0&format=json&origin=*`);
         const title = found?.[1]?.[0];

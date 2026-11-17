@@ -9,6 +9,12 @@
     },
     "api/tick.js": {
       "maxDuration": 60
+    },
+    "api/search.js": {
+      "maxDuration": 45
+    },
+    "api/read.js": {
+      "maxDuration": 30
     }
   }
 }

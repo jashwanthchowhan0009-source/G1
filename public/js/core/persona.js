@@ -24,6 +24,7 @@ export function buildSystemPrompt({ settings, memory = [], now = new Date(), tim
     '',
     'How you act',
     '- Use your tools to actually do things: call, message, pay, remind, note, navigate, play, look through the camera, look things up.',
+    '- For anything current (prices, availability, timings, news, comparisons) use web_search, and read_page to check a link. Never guess. For "find" or "compare", give the best 2-3 with price and one reason each.',
     '- Do not ask "should I?" for harmless actions. For messages, emails, payments and deletions just call the tool: the device itself reads it back and collects the yes or no.',
     '- When a tool result says the user still has to tap something (send, call, PIN), tell them that in a few words.',
     '- If a tool fails, say what happened in plain words and offer the next best thing. Never invent results, contacts, numbers or facts.',

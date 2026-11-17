@@ -173,7 +173,7 @@ test('AI mode: the model calls tools, gets results back, and its words are spoke
   // first request: system prompt, tools, user turn
   assert.match(llm.seen[0].system, /You are G1/);
   assert.match(llm.seen[0].system, /Jashwanth/);
-  assert.ok(llm.seen[0].tools.length >= 38);
+  assert.ok(llm.seen[0].tools.length >= 40);
   assert.equal(llm.seen[0].messages.at(-1).content, 'Hyderabad lo weather ela undi?');
   // second request carries the assistant tool call untouched and the tool result
   const [, second] = llm.seen;
@@ -388,4 +388,22 @@ test('in a browser, sharing and phone contacts are honestly unavailable', async 
   await g.brain.handle('post good morning on facebook');
   r = await g.brain.handle('yes');
   assert.match(r.say, /Install the G1 Android app/);
+});
+
+test('web app: live search through the G1 server, with Wikipedia only as a fallback', async () => {
+  const routes = { '/api/search': { ok: true, answer: 'Sea Breeze in Calangute is ₹2,800 a night. Rated 4.3.', results: [{ title: 'Sea Breeze Calangute', url: 'https://example.com/sb', snippet: '₹2,800 a night' }] } };
+  const llm = scriptedLLM([{ calls: [{ name: 'web_search', args: { query: 'hotels in Goa under 3000' } }] }, { text: 'Sea Breeze, ₹2,800 a night.' }]);
+  const g = makeG1({ llm, routes, server: { search: true } });
+  const r = await g.brain.handle('Goa mein 3000 ke andar hotel dhundo');
+  assert.equal(r.say, 'Sea Breeze, ₹2,800 a night.');
+  assert.equal(r.card.url, 'https://example.com/sb');
+  assert.ok(g.fetchCalls.includes('/api/search'));
+  // basic mode: "who is" asks the server first
+  const b = makeG1({ routes, server: { search: true } });
+  const r2 = await b.brain.handle('who is the best hotel in calangute');
+  assert.equal(r2.say, 'Sea Breeze in Calangute is ₹2,800 a night. Rated 4.3.');
+  // no search on the server: honest answer
+  const n = makeG1({ llm: scriptedLLM([{ calls: [{ name: 'web_search', args: { query: 'x' } }] }, { text: 'ok' }]) });
+  await n.brain.handle('search x');
+  assert.equal(n.fetchCalls.length, 0);
 });

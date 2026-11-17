@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { webSearch } from './agent.js';
+import { webSearch, readPage } from './agent.js';
 // Server side of G1 (optional). Keeps the AI and voice keys off the device.
 // Used by the Vercel functions in /api and by the local dev server.
 //
@@ -85,7 +85,7 @@ async function readJson(request) {
 }
 
 export async function health(request, env, fetchImpl = fetch) {
-  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), storage: createStore(env, fetchImpl).kind };
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), search: Boolean(env.TAVILY_API_KEY || env.LLM_API_KEY), storage: createStore(env, fetchImpl).kind };
   // /api/health?search=1 runs one live web search through the agent's search tool.
   if (new URL(request.url).searchParams.get('search') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();
@@ -185,4 +185,32 @@ export async function tts(request, env, fetchImpl = fetch) {
     return json({ error: `Voice service answered ${res.status}`, detail }, res.status);
   }
   return new Response(res.body, { status: 200, headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' } });
+}
+
+/** POST { query } -> live web results for the G1 app. */
+export async function search(request, env, fetchImpl = fetch) {
+  if (request.method !== 'POST') return json({ error: 'Use POST' }, 405);
+  if (locked(request, env)) return json({ error: 'Wrong or missing G1 passcode' }, 401);
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (e) {
+    return json({ error: e.message }, e.status || 400);
+  }
+  const query = String(body.query || '').trim().slice(0, 300);
+  if (!query) return json({ error: 'query is required' }, 400);
+  return json(await webSearch(env, fetchImpl, query, env.G1_TIMEZONE || 'Asia/Kolkata'));
+}
+
+/** POST { url } -> the page as plain text. */
+export async function read(request, env, fetchImpl = fetch) {
+  if (request.method !== 'POST') return json({ error: 'Use POST' }, 405);
+  if (locked(request, env)) return json({ error: 'Wrong or missing G1 passcode' }, 401);
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (e) {
+    return json({ error: e.message }, e.status || 400);
+  }
+  return json(await readPage(fetchImpl, String(body.url || '')));
 }

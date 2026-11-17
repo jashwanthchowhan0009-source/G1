@@ -10,7 +10,7 @@ import * as handlers from './server/handlers.js';
 
 const ROOT = resolve(fileURLToPath(new URL('./public', import.meta.url)));
 const PORT = Number(process.env.PORT || 5173);
-const ROUTES = { health: handlers.health, llm: handlers.chat, speak: handlers.tts };
+const ROUTES = { health: handlers.health, llm: handlers.chat, speak: handlers.tts, search: handlers.search, read: handlers.read };
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -41,7 +41,7 @@ export function createServer(env = process.env) {
   return http.createServer(async (req, res) => {
     try {
       const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-      const api = /^\/api\/(health|llm|speak)$/.exec(path);
+      const api = /^\/api\/(health|llm|speak|search|read)$/.exec(path);
       if (api) return await send(res, await ROUTES[api[1]](await toRequest(req), env));
 
       let file = normalize(join(ROOT, path));

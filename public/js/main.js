@@ -86,6 +86,7 @@ const ctx = {
   now: () => new Date(),
   fetch: (...a) => fetch(...a),
   core: createCoreLink({ getServer: () => server, settings }),
+  server: () => server,
   get vision() {
     const llm = getLLM();
     return llm ? (photo, q) => llm.see(photo, q, 'You are G1, speaking aloud. Answer in one or two short spoken sentences, in the language of the question. No markdown.') : null;
