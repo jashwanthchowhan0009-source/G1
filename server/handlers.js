@@ -90,7 +90,7 @@ export async function health(request, env, fetchImpl = fetch) {
   if (new URL(request.url).searchParams.get('search') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();
     const r = await webSearch(env, fetchImpl, 'Weather in Anantapur today');
-    info.search = { ok: r.ok, ms: Date.now() - started, sources: r.sources?.length || 0, answer: (r.answer || '').slice(0, 120), error: r.error };
+    info.search = { ok: r.ok, ms: Date.now() - started, sources: r.sources?.length || 0, answer: (r.answer || '').slice(0, 120), error: r.error, detail: r.detail };
   }
   // /api/health?test=1 makes one tiny AI call and reports how it went (never the key).
   if (new URL(request.url).searchParams.get('test') && env.LLM_API_KEY && !locked(request, env)) {

@@ -76,19 +76,25 @@ export const TOOLS = [
 
 async function gemini(env, fetchImpl, body, ms = 20000) {
   if (!env.LLM_API_KEY || !llmTarget(env).isGemini) return { ok: false, error: 'needs a Gemini key' };
-  const models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash'])];
+  const models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'])];
+  const busy = [];
   for (const model of models) {
     try {
       const r = await timedFetch(fetchImpl, `${GEMINI_NATIVE}/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.LLM_API_KEY }, body: JSON.stringify(body) }, ms);
-      if (r.status === 429 || r.status >= 500) continue;
+      if (r.status === 429 || r.status >= 500) {
+        busy.push(`${model}: ${r.status} ${(r.text.match(/"message":\s*"([^"]{0,90})/) || [])[1] || ''}`.trim());
+        continue;
+      }
       const j = JSON.parse(r.text);
       if (r.status >= 400) return { ok: false, error: j?.error?.message || `error ${r.status}` };
       return { ok: true, candidate: j.candidates?.[0] || {} };
     } catch (e) {
       if (e.name !== 'AbortError') return { ok: false, error: 'service unavailable' };
+      busy.push(`${model}: slow`);
     }
   }
-  return { ok: false, error: 'the AI service is busy, try again in a minute' };
+  console.error('gemini: all models busy', busy.join(' | '));
+  return { ok: false, error: 'the AI service is busy, try again in a minute', detail: busy.join(' | ').slice(0, 400) };
 }
 
 export async function webSearch(env, fetchImpl, query, tz = 'Asia/Kolkata') {
