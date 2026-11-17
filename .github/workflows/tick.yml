@@ -1,0 +1,17 @@
+name: G1 tick
+
+# Wakes G1 every 10 minutes so reminders and scheduled checks run.
+# Point it at your own deployment with the repository variable G1_URL.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 90 "${G1_URL:-https://g-one-two.vercel.app}/api/tick"
+        env:
+          G1_URL: ${{ vars.G1_URL }}

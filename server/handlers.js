@@ -1,3 +1,5 @@
+import { createStore } from './store.js';
+import { webSearch } from './agent.js';
 // Server side of G1 (optional). Keeps the AI and voice keys off the device.
 // Used by the Vercel functions in /api and by the local dev server.
 //
@@ -15,7 +17,7 @@ const MAX_SPEECH_CHARS = 1200;
 const UPSTREAM_TIMEOUT_MS = 25000;
 
 /** fetch with a deadline, so a slow AI service gives a clear error instead of a hung request. */
-async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS) {
+export async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -32,7 +34,7 @@ const GEMINI_FALLBACKS = ['gemini-flash-lite-latest', 'gemini-2.5-flash'];
 const ATTEMPT_MS = 8000;
 
 /** One chat completion, trying fallback models on overload, rate limit or timeout. Returns { status, type, text, model }. */
-async function askLLM(env, payload, fetchImpl) {
+export async function askLLM(env, payload, fetchImpl) {
   const t = llmTarget(env);
   const first = env.LLM_MODEL || payload.model || t.model;
   const models = t.isGemini ? [first, ...GEMINI_FALLBACKS.filter((m) => m !== first)].slice(0, 3) : [first];
@@ -61,7 +63,7 @@ async function askLLM(env, payload, fetchImpl) {
   return last;
 }
 
-function llmTarget(env) {
+export function llmTarget(env) {
   const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
   return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.5-flash' };
 }
@@ -83,7 +85,13 @@ async function readJson(request) {
 }
 
 export async function health(request, env, fetchImpl = fetch) {
-  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash' };
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), storage: createStore(env, fetchImpl).kind };
+  // /api/health?search=1 runs one live web search through the agent's search tool.
+  if (new URL(request.url).searchParams.get('search') && env.LLM_API_KEY && !locked(request, env)) {
+    const started = Date.now();
+    const r = await webSearch(env, fetchImpl, 'Weather in Anantapur today');
+    info.search = { ok: r.ok, ms: Date.now() - started, sources: r.sources?.length || 0, answer: (r.answer || '').slice(0, 120), error: r.error };
+  }
   // /api/health?test=1 makes one tiny AI call and reports how it went (never the key).
   if (new URL(request.url).searchParams.get('test') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();

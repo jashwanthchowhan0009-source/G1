@@ -28,6 +28,28 @@
 | `hardware/devkit/` | G1 Dev Kit v0: Raspberry Pi 5 build, parts list, wiring, case | Hand-built |
 | `hardware/PRODUCTION.md` | Path from dev kit to a certified phone | |
 
+## G1 on Telegram (the agent)
+Text or send a voice note; G1 searches the live web, reads pages, compares options, remembers you, and follows up on its own.
+
+| Say | G1 does |
+|---|---|
+| "Goa mein ₹3000 ke andar achha hotel dhundo" | Searches, gives the best 2-3 with price and link |
+| "Kal subah 8 baje gym yaad dilana" | Messages you at 8 |
+| "iPhone 16 60000 se neeche aaye toh batana" | Checks daily, messages only when it happens |
+| "Har roz 9 baje sone ka rate batana" | Daily brief |
+| Voice note in Hindi, Telugu or English | Understood the same way |
+
+**Setup (once, about 5 minutes):**
+1. Telegram → @BotFather → `/newbot` → copy the token.
+2. Vercel → your project → Settings → Environment Variables → `TELEGRAM_BOT_TOKEN` = the token. (`LLM_API_KEY` must be a Gemini key: web search and voice use Gemini.)
+3. Vercel → your project → Storage → Create → **Upstash for Redis** (free) → connect to the project.
+4. Redeploy, then open `https://<your-app>/api/telegram?setup=1` once.
+5. Message your bot `/start`. The first person to message it becomes its only owner.
+
+Reminders run every 10 minutes through the `G1 tick` GitHub Action, so they can be up to ~10 minutes late. Check everything at `/api/health?search=1`.
+
+G1 cannot pay, log in, place orders or message other people from Telegram: it takes the task to the last step and gives you the link.
+
 ## Android app (the real G1)
 **Install:** on an Android phone (8.0+) open https://github.com/jashwanthchowhan0009-source/G1/releases/download/apk-latest/G1.apk, allow "install unknown apps" for the browser, install.
 

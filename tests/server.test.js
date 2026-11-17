@@ -10,7 +10,7 @@ const upstreamOk = (calls) => async (url, init) => {
 };
 
 test('health reports what is configured, and ?test=1 makes one AI call', async () => {
-  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, locked: false, model: 'gemini-3.5-flash' });
+  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, locked: false, model: 'gemini-3.5-flash', telegram: false, storage: 'memory' });
   const calls = [];
   const j = await (await health(new Request('http://x/api/health?test=1'), ENV, upstreamOk(calls))).json();
   assert.equal(j.test.status, 200);
