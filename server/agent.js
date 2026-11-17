@@ -154,6 +154,19 @@ export async function freeSearch(fetchImpl, query) {
 }
 
 export async function webSearch(env, fetchImpl, query, tz = 'Asia/Kolkata') {
+  // Tavily (free 1,000 searches a month at tavily.com): search built for agents, works from cloud servers.
+  if (env.TAVILY_API_KEY) {
+    try {
+      const t = await timedFetch(fetchImpl, 'https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.TAVILY_API_KEY }, body: JSON.stringify({ query, max_results: 5, include_answer: true, search_depth: 'basic' }) }, 15000);
+      if (t.status < 400) {
+        const j = JSON.parse(t.text);
+        const results = (j.results || []).slice(0, 5).map((x) => ({ title: x.title, url: x.url, snippet: String(x.content || '').slice(0, 400) }));
+        if (j.answer || results.length) return { ok: true, answer: String(j.answer || '').slice(0, 2000), results, via: 'tavily' };
+      } else console.error('search: tavily', t.status, t.text.slice(0, 160));
+    } catch {
+      /* try the others */
+    }
+  }
   const r = await gemini(env, fetchImpl, {
     contents: [{ role: 'user', parts: [{ text: `Today is ${sayTime(new Date(), tz)}. Search the web and answer with concrete facts: names, prices in INR when relevant, dates, timings, links. Question: ${query}` }] }],
     tools: [{ google_search: {} }],

@@ -134,3 +134,19 @@ test('when Google grounding is not available, search falls back to plain web res
   assert.equal(r.ok, true);
   assert.deepEqual(r.results, [{ url: 'https://www.example.com/goa', title: 'Goa hotels under 3000', snippet: 'Rooms from ₹2,500' }]);
 });
+
+test('with a Tavily key, search uses Tavily first', async () => {
+  let sent;
+  const fetchImpl = async (url, init) => {
+    if (String(url) === 'https://api.tavily.com/search') {
+      sent = { auth: init.headers.Authorization, body: JSON.parse(init.body) };
+      return new Response(JSON.stringify({ answer: 'Gold is about ₹7,800 a gram.', results: [{ title: 'Gold rate', url: 'https://example.com/gold', content: 'Today 22K ₹7,800' }] }));
+    }
+    return new Response('{}', { status: 500 });
+  };
+  const { webSearch } = await import('../server/agent.js');
+  const r = await webSearch({ TAVILY_API_KEY: 'tvly-x', LLM_API_KEY: 'k' }, fetchImpl, 'gold rate today');
+  assert.equal(sent.auth, 'Bearer tvly-x');
+  assert.equal(sent.body.query, 'gold rate today');
+  assert.deepEqual([r.ok, r.via, r.answer, r.results[0].url], [true, 'tavily', 'Gold is about ₹7,800 a gram.', 'https://example.com/gold']);
+});

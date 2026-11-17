@@ -41,7 +41,7 @@ Text or send a voice note; G1 searches the live web, reads pages, compares optio
 
 **Setup (once, about 5 minutes):**
 1. Telegram → @BotFather → `/newbot` → copy the token.
-2. Vercel → your project → Settings → Environment Variables → `TELEGRAM_BOT_TOKEN` = the token. (`LLM_API_KEY` must be a Gemini key: web search and voice use Gemini.)
+2. Vercel → your project → Settings → Environment Variables → `TELEGRAM_BOT_TOKEN` = the token, and `TAVILY_API_KEY` = a free key from tavily.com (web search; free search pages block cloud servers). `LLM_API_KEY` must be a Gemini key: voice notes use Gemini.
 3. Vercel → your project → Storage → Create → **Upstash for Redis** (free) → connect to the project.
 4. Redeploy, then open `https://<your-app>/api/telegram?setup=1` once.
 5. Message your bot `/start`. The first person to message it becomes its only owner.
