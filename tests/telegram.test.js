@@ -132,5 +132,5 @@ test('when Google grounding is not available, search falls back to plain web res
   const { webSearch } = await import('../server/agent.js');
   const r = await webSearch({ LLM_API_KEY: 'k' }, fetchImpl, 'goa hotels');
   assert.equal(r.ok, true);
-  assert.deepEqual(r.results, [{ title: 'Goa hotels under 3000', url: 'https://www.example.com/goa', snippet: 'Rooms from ₹2,500' }]);
+  assert.deepEqual(r.results, [{ url: 'https://www.example.com/goa', title: 'Goa hotels under 3000', snippet: 'Rooms from ₹2,500' }]);
 });

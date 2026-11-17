@@ -99,28 +99,58 @@ async function gemini(env, fetchImpl, body, ms = 20000) {
 
 const strip = (h) => htmlToText(String(h || '')).replace(/\s+/g, ' ').trim();
 
-/** Plain web results from DuckDuckGo, used when Google grounding is not available on the key. */
-export async function ddgSearch(fetchImpl, query) {
-  try {
-    const r = await timedFetch(fetchImpl, 'https://html.duckduckgo.com/html/?kl=in-en&q=' + encodeURIComponent(query), { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36', 'Accept-Language': 'en-IN,en;q=0.9' } }, 10000);
-    if (r.status >= 400) return [];
-    const out = [];
-    for (const block of r.text.split(/class="result__body|class="result results_links/).slice(1)) {
-      const a = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
-      if (!a) continue;
-      let url = a[1].replace(/&amp;/g, '&');
-      const real = /[?&]uddg=([^&]+)/.exec(url);
-      if (real) url = decodeURIComponent(real[1]);
-      if (url.startsWith('//')) url = 'https:' + url;
-      if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js|ad_domain/.test(url)) continue;
-      const snip = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(block);
-      out.push({ title: strip(a[2]), url, snippet: strip(snip?.[1]).slice(0, 300) });
-      if (out.length >= 6) break;
+const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36', 'Accept-Language': 'en-IN,en;q=0.9', Accept: 'text/html' };
+
+function realUrl(href) {
+  let url = String(href).replace(/&amp;/g, '&');
+  const real = /[?&]uddg=([^&]+)/.exec(url);
+  if (real) url = decodeURIComponent(real[1]);
+  if (url.startsWith('//')) url = 'https:' + url;
+  return /^https?:/.test(url) && !/duckduckgo\.com\/y\.js|ad_domain|mojeek\.com/.test(url) ? url : '';
+}
+
+// Free search pages, tried in order when Google grounding is not available on the key.
+const PROVIDERS = [
+  {
+    name: 'duckduckgo',
+    url: (q) => 'https://html.duckduckgo.com/html/?kl=in-en&q=' + encodeURIComponent(q),
+    parse: (html) =>
+      html.split(/class="result__body/).slice(1).map((b) => {
+        const a = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(b);
+        return a && { url: realUrl(a[1]), title: strip(a[2]), snippet: strip(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(b)?.[1]) };
+      }),
+  },
+  {
+    name: 'duckduckgo-lite',
+    url: (q) => 'https://lite.duckduckgo.com/lite/?kl=in-en&q=' + encodeURIComponent(q),
+    parse: (html) => {
+      const links = [...html.matchAll(/<a[^>]*href="([^"]+)"[^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/g)];
+      const snips = [...html.matchAll(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/g)];
+      return links.map((a, i) => ({ url: realUrl(a[1]), title: strip(a[2]), snippet: strip(snips[i]?.[1]) }));
+    },
+  },
+  {
+    name: 'mojeek',
+    url: (q) => 'https://www.mojeek.com/search?q=' + encodeURIComponent(q),
+    parse: (html) =>
+      [...html.matchAll(/<a[^>]*class="title"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<p class="s">([\s\S]*?)<\/p>/g)].map((m) => ({ url: realUrl(m[1]), title: strip(m[2]), snippet: strip(m[3]) })),
+  },
+];
+
+/** Plain web results from free search pages. Returns { results, trace }. */
+export async function freeSearch(fetchImpl, query) {
+  const trace = [];
+  for (const p of PROVIDERS) {
+    try {
+      const r = await timedFetch(fetchImpl, p.url(query), { headers: UA }, 9000);
+      const results = r.status < 400 ? p.parse(r.text).filter((x) => x && x.url && x.title).slice(0, 6).map((x) => ({ ...x, snippet: x.snippet.slice(0, 300) })) : [];
+      trace.push(`${p.name}: ${r.status} ${results.length}`);
+      if (results.length) return { results, trace };
+    } catch {
+      trace.push(`${p.name}: failed`);
     }
-    return out;
-  } catch {
-    return [];
   }
+  return { results: [], trace };
 }
 
 export async function webSearch(env, fetchImpl, query, tz = 'Asia/Kolkata') {
@@ -133,9 +163,10 @@ export async function webSearch(env, fetchImpl, query, tz = 'Asia/Kolkata') {
     const sources = (r.candidate.groundingMetadata?.groundingChunks || []).map((g) => g.web).filter(Boolean).slice(0, 6).map((w) => ({ title: w.title, url: w.uri }));
     if (answer) return { ok: true, answer: answer.slice(0, 4000), sources };
   }
-  const results = await ddgSearch(fetchImpl, query);
-  if (results.length) return { ok: true, results, note: 'Search snippets only. Open the most useful links with read_page before giving prices or details.' };
-  return { ok: false, error: r.error || 'search found nothing', detail: r.detail };
+  const { results, trace } = await freeSearch(fetchImpl, query);
+  if (results.length) return { ok: true, results, via: trace.at(-1), note: 'Search snippets only. Open the most useful links with read_page before giving prices or details.' };
+  console.error('search: nothing found', trace.join(' | '));
+  return { ok: false, error: 'web search is not available right now', detail: [r.detail, ...trace].filter(Boolean).join(' | ').slice(0, 500) };
 }
 
 export async function transcribe(env, fetchImpl, bytes, mime = 'audio/ogg') {
