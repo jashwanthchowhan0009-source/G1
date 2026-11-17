@@ -121,3 +121,16 @@ test('pages are read as text; private addresses are refused', async () => {
   assert.equal(htmlToText('<p>a&nbsp;b</p><style>x</style>'), 'a b');
   assert.equal(isoLocal(NOW, 'Asia/Kolkata'), '2026-11-17T18:00:00+05:30');
 });
+
+test('when Google grounding is not available, search falls back to plain web results', async () => {
+  const html = '<div class="result results_links"><div class="result__body"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.example.com%2Fgoa&amp;rut=x">Goa <b>hotels</b> under 3000</a><a class="result__snippet" href="x">Rooms from &#8377;2,500</a></div></div>';
+  const fetchImpl = async (url) => {
+    if (String(url).includes(':generateContent')) return new Response('{"error":{"message":"quota"}}', { status: 429 });
+    if (String(url).includes('duckduckgo')) return new Response(html, { headers: { 'content-type': 'text/html' } });
+    return new Response('{}', { status: 404 });
+  };
+  const { webSearch } = await import('../server/agent.js');
+  const r = await webSearch({ LLM_API_KEY: 'k' }, fetchImpl, 'goa hotels');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.results, [{ title: 'Goa hotels under 3000', url: 'https://www.example.com/goa', snippet: 'Rooms from ₹2,500' }]);
+});

@@ -76,7 +76,7 @@ export const TOOLS = [
 
 async function gemini(env, fetchImpl, body, ms = 20000) {
   if (!env.LLM_API_KEY || !llmTarget(env).isGemini) return { ok: false, error: 'needs a Gemini key' };
-  const models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'])];
+  const models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest'])];
   const busy = [];
   for (const model of models) {
     try {
@@ -97,15 +97,45 @@ async function gemini(env, fetchImpl, body, ms = 20000) {
   return { ok: false, error: 'the AI service is busy, try again in a minute', detail: busy.join(' | ').slice(0, 400) };
 }
 
+const strip = (h) => htmlToText(String(h || '')).replace(/\s+/g, ' ').trim();
+
+/** Plain web results from DuckDuckGo, used when Google grounding is not available on the key. */
+export async function ddgSearch(fetchImpl, query) {
+  try {
+    const r = await timedFetch(fetchImpl, 'https://html.duckduckgo.com/html/?kl=in-en&q=' + encodeURIComponent(query), { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36', 'Accept-Language': 'en-IN,en;q=0.9' } }, 10000);
+    if (r.status >= 400) return [];
+    const out = [];
+    for (const block of r.text.split(/class="result__body|class="result results_links/).slice(1)) {
+      const a = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+      if (!a) continue;
+      let url = a[1].replace(/&amp;/g, '&');
+      const real = /[?&]uddg=([^&]+)/.exec(url);
+      if (real) url = decodeURIComponent(real[1]);
+      if (url.startsWith('//')) url = 'https:' + url;
+      if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js|ad_domain/.test(url)) continue;
+      const snip = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+      out.push({ title: strip(a[2]), url, snippet: strip(snip?.[1]).slice(0, 300) });
+      if (out.length >= 6) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export async function webSearch(env, fetchImpl, query, tz = 'Asia/Kolkata') {
   const r = await gemini(env, fetchImpl, {
     contents: [{ role: 'user', parts: [{ text: `Today is ${sayTime(new Date(), tz)}. Search the web and answer with concrete facts: names, prices in INR when relevant, dates, timings, links. Question: ${query}` }] }],
     tools: [{ google_search: {} }],
   });
-  if (!r.ok) return { ok: false, error: r.error };
-  const answer = (r.candidate.content?.parts || []).map((p) => p.text || '').join('').trim();
-  const sources = (r.candidate.groundingMetadata?.groundingChunks || []).map((g) => g.web).filter(Boolean).slice(0, 6).map((w) => ({ title: w.title, url: w.uri }));
-  return { ok: Boolean(answer), answer: answer.slice(0, 4000), sources };
+  if (r.ok) {
+    const answer = (r.candidate.content?.parts || []).map((p) => p.text || '').join('').trim();
+    const sources = (r.candidate.groundingMetadata?.groundingChunks || []).map((g) => g.web).filter(Boolean).slice(0, 6).map((w) => ({ title: w.title, url: w.uri }));
+    if (answer) return { ok: true, answer: answer.slice(0, 4000), sources };
+  }
+  const results = await ddgSearch(fetchImpl, query);
+  if (results.length) return { ok: true, results, note: 'Search snippets only. Open the most useful links with read_page before giving prices or details.' };
+  return { ok: false, error: r.error || 'search found nothing', detail: r.detail };
 }
 
 export async function transcribe(env, fetchImpl, bytes, mime = 'audio/ogg') {
