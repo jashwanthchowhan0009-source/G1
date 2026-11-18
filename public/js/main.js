@@ -87,6 +87,7 @@ const ctx = {
   fetch: (...a) => fetch(...a),
   core: createCoreLink({ getServer: () => server, settings }),
   server: () => server,
+  aiAvailable: () => Boolean(getLLM()),
   get vision() {
     const llm = getLLM();
     return llm ? (photo, q) => llm.see(photo, q, 'You are G1, speaking aloud. Answer in one or two short spoken sentences, in the language of the question. No markdown.') : null;
@@ -193,6 +194,21 @@ function afterReply(reply) {
 
 /** A timer, alarm or reminder is due. */
 async function announce(item) {
+  if (item.repeat === 'daily') scheduler.add({ ...item, at: item.at + Math.ceil((Date.now() - item.at + 1) / 86400000) * 86400000 });
+  if (item.kind === 'check') {
+    if (busy) return setTimeout(() => announce({ ...item, repeat: 'none' }), 5000);
+    busy = true;
+    const r = await brain.runScheduled(item.text);
+    busy = false;
+    if (!r.say) return;
+    platform.vibrate([200, 100, 200]);
+    platform.notify('G1', r.say);
+    busy = true;
+    ears.pause();
+    await present(r);
+    busy = false;
+    return afterReply(null);
+  }
   const late = item.lateBy > 90000;
   let say;
   if (item.kind === 'timer') say = T(`Time's up${item.text ? ` for ${item.text}` : ''}.`, `${item.text ? item.text + ' ka ' : ''}timer poora ho gaya.`);

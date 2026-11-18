@@ -55,6 +55,7 @@ export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NO
     vision: llm ? (img, q) => llm.see(img, q) : null,
     core,
     server: () => server,
+    aiAvailable: () => Boolean(llm),
   };
   const skills = createSkills();
   const brain = createBrain({ skills, ctx, getLLM: () => llm, timeZone: 'Asia/Kolkata' });

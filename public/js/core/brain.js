@@ -4,7 +4,7 @@
 import { parseIntent, stripWake, yesNo } from './nlu.js';
 import { buildSystemPrompt, forSpeech, smallTalk, greeting } from './persona.js';
 
-const MAX_ROUNDS = 5;
+const MAX_ROUNDS = 8;
 const MAX_HISTORY = 24;
 
 export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' }) {
@@ -63,8 +63,9 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
     return { say: res.say, card: res.card, expectReply: Boolean(res.expectReply), source: 'local', tool: intent.tool, ok: res.ok };
   }
 
-  async function withModel(llm, text) {
-    const system = buildSystemPrompt({ settings: settings(), memory: ctx.store.get('memory', []), now: ctx.now(), timeZone });
+  async function withModel(llm, text, { scheduled = false } = {}) {
+    let system = buildSystemPrompt({ settings: settings(), memory: ctx.store.get('memory', []), now: ctx.now(), timeZone });
+    if (scheduled) system += '\n\nThis is a check you scheduled earlier with check_later. Do the task now. If there is nothing the user needs to hear, reply with exactly: SKIP';
     const tools = skills.toolSchemas();
     const messages = [...history, { role: 'user', content: text }];
     let card = null;
@@ -73,6 +74,7 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
       const r = await llm.chat({ system, messages, tools });
       messages.push(r.message);
       if (!r.toolCalls.length) {
+        if (scheduled) return { say: forSpeech(r.text), card, source: 'ai' };
         history = trim(messages);
         const say = forSpeech(r.text) || lastSay;
         return { say, card, expectReply: /\?\s*$/.test(say), source: 'ai' };
@@ -152,6 +154,18 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
       const reply = await local(text);
       remember(text, reply);
       return reply;
+    },
+
+    /** Runs a check scheduled with check_later. Returns { say, card }; say is '' when there is nothing to report. */
+    async runScheduled(task) {
+      const llm = getLLM();
+      if (!llm) return { say: '' };
+      try {
+        const r = await withModel(llm, 'Scheduled check: ' + task, { scheduled: true });
+        return /^\s*SKIP\W*$/i.test(r.say || '') ? { say: '' } : r;
+      } catch {
+        return { say: '' };
+      }
     },
 
     /** Touch fallback for the yes/no card. */

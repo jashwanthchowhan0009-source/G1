@@ -7,6 +7,8 @@ import { createStore } from '../server/store.js';
 const TOKEN = '123:abc';
 const OWNER = 777;
 const NOW = new Date('2026-11-17T12:30:00Z'); // 6 PM in India
+const H = 3600000;
+const later = (hours) => new Date(Date.now() + hours * H); // the agent checks times against the real clock
 
 /** A fake world: Telegram, Gemini (chat, search, audio), Redis, and web pages. */
 function world(script = []) {
@@ -78,24 +80,24 @@ test('the agent searches the web, then answers with what it found', async () => 
 });
 
 test('voice notes are transcribed and acted on; a reminder is scheduled and later delivered', async () => {
-  const w = world([{ calls: [{ name: 'schedule', args: { kind: 'remind', when: '2026-11-18T08:00:00+05:30', text: 'Gym time' } }] }, { text: 'Done, kal 8 baje yaad dila dunga.' }]);
+  const w = world([{ calls: [{ name: 'schedule', args: { kind: 'remind', when: isoLocal(later(10), 'Asia/Kolkata'), text: 'Gym time' } }] }, { text: 'Done, kal 8 baje yaad dila dunga.' }]);
   await telegram(w.hook({ voice: { file_id: 'v1', file_size: 2000, mime_type: 'audio/ogg' } }), w.env, w.fetchImpl);
   assert.equal(w.llmSeen[0].messages.at(-1).content, 'kal subah 8 baje gym yaad dilana');
   assert.match(w.sent.at(-1).text, /yaad dila dunga/);
-  let t = await (await tick(null, w.env, w.fetchImpl, NOW)).json();
+  let t = await (await tick(null, w.env, w.fetchImpl, later(1))).json();
   assert.equal(t.due, 0, 'not due yet');
-  t = await (await tick(null, w.env, w.fetchImpl, new Date('2026-11-18T02:35:00Z'))).json();
+  t = await (await tick(null, w.env, w.fetchImpl, later(10.1))).json();
   assert.deepEqual([t.due, t.ran], [1, 1]);
   assert.equal(w.sent.at(-1).text, 'Reminder: Gym time');
-  t = await (await tick(null, w.env, w.fetchImpl, new Date('2026-11-18T02:45:00Z'))).json();
+  t = await (await tick(null, w.env, w.fetchImpl, later(10.3))).json();
   assert.equal(t.due, 0, 'a one-time reminder runs once');
 });
 
 test('a repeating check runs the agent, stays quiet on SKIP, and comes back next day', async () => {
-  const w = world([{ calls: [{ name: 'schedule', args: { kind: 'check', when: '2026-11-18T09:00:00+05:30', text: 'Tell me if iPhone 16 is under 60000', repeat: 'daily' } }] }, { text: 'Roz 9 baje check karunga.' }, { text: 'SKIP' }]);
+  const w = world([{ calls: [{ name: 'schedule', args: { kind: 'check', when: isoLocal(later(12), 'Asia/Kolkata'), text: 'Tell me if iPhone 16 is under 60000', repeat: 'daily' } }] }, { text: 'Roz 9 baje check karunga.' }, { text: 'SKIP' }]);
   await telegram(w.hook({ text: 'iPhone 16 60000 se neeche aaye toh batana' }), w.env, w.fetchImpl);
   const before = w.sent.length;
-  const t = await (await tick(null, w.env, w.fetchImpl, new Date('2026-11-18T03:31:00Z'))).json();
+  const t = await (await tick(null, w.env, w.fetchImpl, later(12.1))).json();
   assert.equal(t.ran, 1);
   assert.equal(w.sent.length, before, 'SKIP sends nothing');
   assert.match(w.llmSeen.at(-1).messages[0].content, /reply with exactly: SKIP/);

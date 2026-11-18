@@ -6,7 +6,8 @@ import { askLLM, llmTarget, timedFetch } from './handlers.js';
 import { getJson, setJson } from './store.js';
 
 const GEMINI_NATIVE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MAX_ROUNDS = 6;
+const MAX_ROUNDS = 8;
+const nativeGood = { model: '', until: 0 };
 const HISTORY = 16;
 
 // ---------------------------------------------------------------- time
@@ -76,7 +77,8 @@ export const TOOLS = [
 
 async function gemini(env, fetchImpl, body, ms = 20000) {
   if (!env.LLM_API_KEY || !llmTarget(env).isGemini) return { ok: false, error: 'needs a Gemini key' };
-  const models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest'])];
+  let models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest'])];
+  if (nativeGood.model && Date.now() < nativeGood.until) models = [nativeGood.model, ...models.filter((m) => m !== nativeGood.model)];
   const busy = [];
   for (const model of models) {
     try {
@@ -87,6 +89,7 @@ async function gemini(env, fetchImpl, body, ms = 20000) {
       }
       const j = JSON.parse(r.text);
       if (r.status >= 400) return { ok: false, error: j?.error?.message || `error ${r.status}` };
+      Object.assign(nativeGood, { model, until: Date.now() + 15 * 60000 });
       return { ok: true, candidate: j.candidates?.[0] || {} };
     } catch (e) {
       if (e.name !== 'AbortError') return { ok: false, error: 'service unavailable' };

@@ -32,12 +32,15 @@ export async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS)
 // When Google's newest model is overloaded or slow, G1 moves on to the next one instead of failing.
 const GEMINI_FALLBACKS = ['gemini-flash-lite-latest', 'gemini-2.5-flash'];
 const ATTEMPT_MS = 8000;
+const lastGood = { model: '', until: 0 }; // per warm server instance
 
 /** One chat completion, trying fallback models on overload, rate limit or timeout. Returns { status, type, text, model }. */
 export async function askLLM(env, payload, fetchImpl) {
   const t = llmTarget(env);
   const first = env.LLM_MODEL || payload.model || t.model;
-  const models = t.isGemini ? [first, ...GEMINI_FALLBACKS.filter((m) => m !== first)].slice(0, 3) : [first];
+  let models = t.isGemini ? [first, ...GEMINI_FALLBACKS.filter((m) => m !== first)].slice(0, 3) : [first];
+  // try the model that answered last first, so a busy one does not cost seconds on every message
+  if (t.isGemini && lastGood.model && lastGood.base === t.base && Date.now() < lastGood.until) models = [lastGood.model, ...models.filter((m) => m !== lastGood.model)];
   let last = null;
   for (const model of models) {
     try {
@@ -52,7 +55,11 @@ export async function askLLM(env, payload, fetchImpl) {
         models.length > 1 ? ATTEMPT_MS : UPSTREAM_TIMEOUT_MS,
       );
       last = { ...r, model };
-      if (r.status !== 429 && r.status < 500) return last; // success, or an error another model will not fix
+      if (r.status !== 429 && r.status < 500) {
+        if (r.status < 300 && t.isGemini) Object.assign(lastGood, { model, base: t.base, until: Date.now() + 15 * 60000 });
+        return last; // success, or an error another model will not fix
+      }
+      if (lastGood.model === model) lastGood.until = 0;
       console.error('AI model busy', model, r.status, r.text.slice(0, 160));
     } catch (e) {
       if (e.name !== 'AbortError') throw e;

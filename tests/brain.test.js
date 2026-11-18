@@ -173,7 +173,7 @@ test('AI mode: the model calls tools, gets results back, and its words are spoke
   // first request: system prompt, tools, user turn
   assert.match(llm.seen[0].system, /You are G1/);
   assert.match(llm.seen[0].system, /Jashwanth/);
-  assert.ok(llm.seen[0].tools.length >= 40);
+  assert.ok(llm.seen[0].tools.length >= 41);
   assert.equal(llm.seen[0].messages.at(-1).content, 'Hyderabad lo weather ela undi?');
   // second request carries the assistant tool call untouched and the tool result
   const [, second] = llm.seen;
@@ -406,4 +406,30 @@ test('web app: live search through the G1 server, with Wikipedia only as a fallb
   const n = makeG1({ llm: scriptedLLM([{ calls: [{ name: 'web_search', args: { query: 'x' } }] }, { text: 'ok' }]) });
   await n.brain.handle('search x');
   assert.equal(n.fetchCalls.length, 0);
+});
+
+test('agentic: check_later schedules a task, runs it with tools later, and stays quiet on SKIP', async () => {
+  const llm = scriptedLLM([
+    { calls: [{ name: 'check_later', args: { task: 'Tell me if iPhone 16 is under 60000 on Flipkart', when_iso: '2026-11-11T09:00:00', repeat: 'daily' } }] },
+    { text: "Okay, I'll check every morning." },
+    { calls: [{ name: 'web_search', args: { query: 'iPhone 16 price Flipkart' } }] },
+    { text: 'SKIP' },
+    { text: 'iPhone 16 is ₹58,999 on Flipkart now.' },
+  ]);
+  const g = makeG1({ llm, server: { search: true }, routes: { '/api/search': { ok: true, answer: '₹62,999', results: [] } } });
+  const r = await g.brain.handle('iPhone 16 60000 se neeche aaye toh batana');
+  assert.match(r.say, /check every morning/);
+  const [item] = g.scheduler.list('check');
+  assert.deepEqual([item.text, item.repeat, new Date(item.at).getHours()], ['Tell me if iPhone 16 is under 60000 on Flipkart', 'daily', 9]);
+  let run = await g.brain.runScheduled(item.text);
+  assert.equal(run.say, '', 'SKIP means nothing to say');
+  assert.match(llm.seen[2].system, /reply with exactly: SKIP/);
+  assert.ok(g.fetchCalls.includes('/api/search'), 'the check used live search');
+  run = await g.brain.runScheduled(item.text);
+  assert.equal(run.say, 'iPhone 16 is ₹58,999 on Flipkart now.');
+  assert.equal(g.brain.history().filter((m) => /Scheduled check/.test(m.content || '')).length, 0, 'checks do not clutter the chat history');
+  // without an AI key it says so instead of pretending
+  const basic = makeG1();
+  const s = await basic.skills.get('check_later').run({ task: 'x', when_iso: '2026-11-11T09:00:00' }, basic.ctx);
+  assert.equal(s.data.error, 'needs_ai');
 });

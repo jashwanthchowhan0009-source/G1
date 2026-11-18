@@ -227,11 +227,40 @@ export const lifeSkills = [
     },
   },
   {
+    name: 'check_later',
+    description: 'Do a task on your own later and tell the user only if it matters: price watches ("tell me if X drops below Y"), follow-ups, daily briefs ("every morning tell me the gold rate"). The task runs with your tools (web_search etc.) at that time.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'Precise instruction for your future self, including when to tell the user' },
+        when_iso: { type: 'string', description: 'First run, local ISO 8601, e.g. 2026-11-20T09:00:00' },
+        repeat: { type: 'string', enum: ['none', 'daily'] },
+      },
+      required: ['task', 'when_iso'],
+    },
+    run(args, ctx) {
+      if (!ctx.aiAvailable?.()) return fail(ctx, 'Checks need the AI brain. Add an AI key in settings.', 'Iske liye AI brain chahiye. Settings mein AI key daalo.', { error: 'needs_ai' });
+      const task = String(args.task || '').trim();
+      const when = new Date(args.when_iso);
+      if (!task) return ask(ctx, 'What should I keep an eye on?', 'Kis cheez pe nazar rakhu?');
+      if (Number.isNaN(when.getTime()) || when.getTime() < ctx.now().getTime() - 60000) return ask(ctx, 'When should I check?', 'Kab check karu?');
+      const repeat = args.repeat === 'daily' ? 'daily' : 'none';
+      const item = ctx.scheduler.add({ kind: 'check', at: when.getTime(), text: task, repeat });
+      const at = sayWhen(when, ctx.now(), lang(ctx));
+      return {
+        ok: true,
+        say: repeat === 'daily' ? L(ctx, `Okay, I'll check every day, starting ${at}.`, `Theek hai, roz check karunga, ${at} se.`) : L(ctx, `Okay, I'll check ${at} and tell you if it matters.`, `Theek hai, ${at} check karke bataunga.`),
+        data: { id: item.id, task, when: when.toISOString(), repeat, note: 'Runs while G1 is open; if G1 was closed, it runs when G1 opens next.' },
+        card: { type: 'list', title: L(ctx, 'Watching', 'Nazar rakh raha hu'), items: [`${task}, ${at}${repeat === 'daily' ? ', daily' : ''}`] },
+      };
+    },
+  },
+  {
     name: 'list_reminders',
     description: 'Read out upcoming reminders and alarms.',
     parameters: { type: 'object', properties: {} },
     run(_args, ctx) {
-      const items = ctx.scheduler.list(['reminder', 'alarm']);
+      const items = ctx.scheduler.list(['reminder', 'alarm', 'check']);
       if (!items.length) return { ok: true, say: L(ctx, 'Nothing coming up.', 'Koi reminder nahi hai.'), data: { reminders: [] } };
       const now = ctx.now();
       const spoken = items.slice(0, 3).map((x) => `${x.text || 'alarm'} ${sayWhen(new Date(x.at), now, lang(ctx))}`);
@@ -250,7 +279,7 @@ export const lifeSkills = [
     parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
     run(args, ctx) {
       const q = norm(args.query);
-      const items = ctx.scheduler.list(['reminder', 'alarm']);
+      const items = ctx.scheduler.list(['reminder', 'alarm', 'check']);
       const hit = !q || /^(all|sab|everything|saare)$/.test(q) ? items : items.filter((x) => norm(x.text || 'alarm').includes(q) || q.includes(x.kind));
       if (!hit.length) return fail(ctx, "I couldn't find that reminder.", 'Aisa koi reminder nahi mila.', { error: 'not_found' });
       hit.forEach((x) => ctx.scheduler.remove(x.id));

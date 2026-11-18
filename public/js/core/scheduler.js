@@ -34,8 +34,8 @@ export function createScheduler({ store, onFire, now = () => Date.now(), setTime
 
   return {
     /** kind: 'timer' | 'reminder' | 'alarm' */
-    add({ kind, at, text = '' }) {
-      const item = { id: uid(), kind, at, text, created: now() };
+    add({ kind, at, text = '', repeat = 'none' }) {
+      const item = { id: uid(), kind, at, text, repeat, created: now() };
       save([...all(), item]);
       arm(item);
       return item;

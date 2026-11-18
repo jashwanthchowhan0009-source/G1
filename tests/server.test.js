@@ -83,3 +83,16 @@ test('when the first Gemini model is overloaded or slow, the next one answers', 
   assert.equal(bad.status, 400);
   assert.equal(tried.length, 1);
 });
+
+test('the model that answered last is tried first', async () => {
+  const tried = [];
+  const f = async (u, init) => {
+    const m = JSON.parse(init.body).model;
+    tried.push(m);
+    return m === 'gemini-flash-lite-latest' ? new Response('{"choices":[{"message":{"content":"ok"}}]}', { headers: { 'content-type': 'application/json' } }) : new Response('{}', { status: 429 });
+  };
+  await chat(post('/api/llm', { messages: [] }), ENV, f);
+  tried.length = 0;
+  await chat(post('/api/llm', { messages: [] }), ENV, f);
+  assert.deepEqual(tried, ['gemini-flash-lite-latest']);
+});
