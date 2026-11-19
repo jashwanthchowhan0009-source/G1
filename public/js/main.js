@@ -6,14 +6,14 @@ import { createScheduler } from './core/scheduler.js';
 import { createBrain } from './core/brain.js';
 import { createLLM } from './core/llm.js';
 import { createCoreLink } from './core/corelink.js';
-import { hasWake } from './core/nlu.js';
+import { hasWake, normalizeWake } from './core/nlu.js';
 import { sayClock } from './core/datetime.js';
 import { createSkills } from './skills/index.js';
 import { createPlatform } from './platform.js';
 import { createVoice } from './voice/tts.js';
 import { createEars } from './voice/stt.js';
 import { createBloom, createCardView } from './ui.js';
-import { onNative } from './native.js';
+import { onNative, nativeCall, has as hasNative } from './native.js';
 
 const $ = (id) => document.getElementById(id);
 const screen = $('screen');
@@ -26,6 +26,7 @@ let state = 'idle';
 let busy = false;
 let followUpUntil = 0;
 let queued = '';
+let lastViaVoice = false; // the last request was spoken: keep the conversation going after the reply
 let chipPrefix = ''; // a shortcut chip was tapped: the next thing heard completes it
 
 const hi = () => settings.get().language === 'hi-IN';
@@ -100,16 +101,17 @@ const voice = createVoice({ settings, getServer: () => server });
 const ears = createEars({
   settings,
   onInterim(text) {
-    $('heard').textContent = text;
+    $('heard').textContent = normalizeWake(text);
     bloom.pulse();
   },
-  onFinal(text, { handsfree }) {
+  onFinal(raw, { handsfree }) {
+    const text = normalizeWake(raw);
     // hands-free: act only when called by name, or right after G1 asked something
     if (handsfree && !hasWake(text) && Date.now() > followUpUntil && !brain.hasPending()) {
       $('heard').textContent = '';
       return;
     }
-    hear(text);
+    hear(text, { voice: true });
   },
   onState(listening) {
     if (listening && !busy) setState('listening');
@@ -130,9 +132,10 @@ const ears = createEars({
 });
 
 /** Everything the user says or types comes through here. */
-async function hear(text) {
+async function hear(text, { voice: spoken = false } = {}) {
   text = String(text || '').trim();
   if (!text) return;
+  lastViaVoice = spoken;
   if (chipPrefix) {
     // "Call" chip + "Papa" becomes "call Papa", unless the user said a full request anyway
     if (!/^(call|send|tell|whatsapp|message|remind|pay|what|set|play|open|stop|cancel|no|nahi)\b/i.test(text)) text = chipPrefix + text;
@@ -187,10 +190,30 @@ async function present(reply) {
 }
 
 function afterReply(reply) {
-  if (reply?.expectReply) followUpUntil = Date.now() + 12000;
+  if (reply?.stop) return; // "bas", "stop", "thank you": the conversation is over
+  // A spoken conversation keeps going like a phone call: after G1 answers it listens again, no tap and no
+  // "Hey G1" needed. Silence ends it.
+  const talking = reply?.expectReply || (lastViaVoice && reply);
+  if (talking) followUpUntil = Date.now() + 12000;
   if (settings.get().handsfree) ears.startHandsfree();
-  else if (reply?.expectReply && ears.supported) ears.listenOnce(); // G1 asked a question: listen for the answer
+  else if (talking && ears.supported) ears.listenOnce();
 }
+
+/** "Hey G1" was heard while G1 was closed (Android app), or G1 was opened as the phone's assistant. */
+function wakeUp() {
+  if (!hasNative('takeWake') || !nativeCall('takeWake')) return;
+  if (!$('start').hidden) {
+    $('start').hidden = true;
+    store.set('started', true);
+  }
+  if (busy) return;
+  voice.stop();
+  $('heard').textContent = '';
+  $('said').textContent = T('Yes? Go ahead.', 'Haan, bolo.');
+  lastViaVoice = true;
+  ears.listenOnce();
+}
+onNative('wake', wakeUp);
 
 /** A timer, alarm or reminder is due. */
 async function announce(item) {
@@ -349,6 +372,8 @@ const CONNECTIONS = [
   ['camera', 'Camera', 'Photos and "what is this?"'],
   ['location', 'Location', 'Weather, directions, places near you'],
   ['notifications', 'Notifications', 'Reminders when the screen is off'],
+  ['wake', 'Hey G1, anytime', 'Wake G1 by voice even when it is closed. Offline, on this phone only'],
+  ['popup', 'Open instantly', 'Lets "Hey G1" open G1 straight away (Display over other apps)'],
 ];
 function fillConnections() {
   const state = platform.permissions();
@@ -360,6 +385,7 @@ function fillConnections() {
   }
   $('connHelp').textContent = 'Nothing is sent, paid or posted without your yes. Contacts stay on this phone.';
   for (const [key, title, why] of CONNECTIONS) {
+    if (!(key in state)) continue; // an older G1 app without this feature
     const row = document.createElement('div');
     row.className = 'conn';
     const text = document.createElement('div');
@@ -428,5 +454,6 @@ async function boot() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
   globalThis.g1 = { brain, hear, settings, store, skills, voice, ears, get server() { return server; } };
   document.documentElement.dataset.ready = 'true';
+  wakeUp(); // opened by "Hey G1"
 }
 boot();

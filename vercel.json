@@ -3,6 +3,7 @@
   "buildCommand": "",
   "installCommand": "",
   "outputDirectory": "public",
+  "regions": ["bom1"],
   "functions": {
     "api/telegram.js": {
       "maxDuration": 60

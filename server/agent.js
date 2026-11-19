@@ -77,7 +77,7 @@ export const TOOLS = [
 
 async function gemini(env, fetchImpl, body, ms = 20000) {
   if (!env.LLM_API_KEY || !llmTarget(env).isGemini) return { ok: false, error: 'needs a Gemini key' };
-  let models = [...new Set([env.LLM_MODEL || 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest'])];
+  let models = [...new Set([env.LLM_MODEL || 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'])];
   if (nativeGood.model && Date.now() < nativeGood.until) models = [nativeGood.model, ...models.filter((m) => m !== nativeGood.model)];
   const busy = [];
   for (const model of models) {

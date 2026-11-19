@@ -26,6 +26,19 @@ jobs:
           KS: ${{ secrets.G1_KEYSTORE_B64 }}
         run: |
           if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/g1.jks"; echo "G1_KEYSTORE_FILE=$RUNNER_TEMP/g1.jks" >> "$GITHUB_ENV"; fi
+      - name: Wake-word model (offline, Indian English)
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/m" android/app/src/main/assets
+          cd "$RUNNER_TEMP/m"
+          curl -fsSL -o m.zip https://alphacephei.com/vosk/models/vosk-model-small-en-in-0.4.zip \
+            || curl -fsSL -o m.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+          unzip -q m.zip
+          dir=$(find . -maxdepth 1 -type d -name 'vosk-model-*' | head -1)
+          rm -rf "$GITHUB_WORKSPACE/android/app/src/main/assets/model"
+          mv "$dir" "$GITHUB_WORKSPACE/android/app/src/main/assets/model"
+          echo "$(basename "$dir")" > "$GITHUB_WORKSPACE/android/app/src/main/assets/model/uuid"
+          ls "$GITHUB_WORKSPACE/android/app/src/main/assets/model"
       - name: Build the APK
         env:
           G1_KEYSTORE_PASS: ${{ secrets.G1_KEYSTORE_PASS }}

@@ -153,3 +153,12 @@ python3 hardware/g1-phone/build_enclosure.py   # rebuilds the shell and checks 1
 | The phone shell is a fit-check model | No board exists yet for it | Steps in `hardware/g1-phone/README.md` |
 
 Fonts: Anek (Latin, Devanagari, Telugu), SIL Open Font License, in `public/fonts/`.
+
+### "Hey G1" when G1 is closed (Android app 0.2+)
+
+Settings → Connections → **Hey G1, anytime** → Allow. G1 then listens for "Hey G1" (or "Jeevan", which is how many phones hear it) with an offline recogniser that runs only on the phone; nothing is recorded or sent. Say it with the screen off and G1 turns the screen on, asks for your unlock if the phone is locked, and starts listening.
+
+- Also allow **Open instantly** (Display over other apps) so G1 opens straight away instead of showing a notification to tap.
+- Optional: Settings → Apps → Default apps → Digital assistant → G1, to open it with a long-press of power/home.
+- After a restart, open G1 once; Android only lets the microphone start while the app is on screen.
+- Talk like a call: after G1 answers it keeps listening. Stay quiet or say "bas" to end.

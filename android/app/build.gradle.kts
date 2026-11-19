@@ -14,8 +14,9 @@ android {
         applicationId = "com.sherrbyte.g1"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones only: keeps the APK small
         buildConfigField("String", "G1_URL", "\"$g1Url\"")
     }
     // Same key on every build, so a new APK installs over the old one.
@@ -36,4 +37,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+
+dependencies {
+    // Offline "Hey G1" listener; the speech model is added to assets by the build (see .github/workflows/android.yml)
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }

@@ -30,7 +30,7 @@ export async function timedFetch(fetchImpl, url, init, ms = UPSTREAM_TIMEOUT_MS)
 }
 
 // When Google's newest model is overloaded or slow, G1 moves on to the next one instead of failing.
-const GEMINI_FALLBACKS = ['gemini-flash-lite-latest', 'gemini-2.5-flash'];
+const GEMINI_FALLBACKS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-3.5-flash'];
 const ATTEMPT_MS = 8000;
 const lastGood = { model: '', until: 0 }; // per warm server instance
 
@@ -72,7 +72,7 @@ export async function askLLM(env, payload, fetchImpl) {
 
 export function llmTarget(env) {
   const base = (env.LLM_BASE_URL || GEMINI).replace(/\/+$/, '');
-  return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-3.5-flash' };
+  return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-flash-lite-latest' };
 }
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -92,7 +92,7 @@ async function readJson(request) {
 }
 
 export async function health(request, env, fetchImpl = fetch) {
-  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-3.5-flash', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), search: Boolean(env.TAVILY_API_KEY || env.LLM_API_KEY), storage: createStore(env, fetchImpl).kind };
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-flash-lite-latest', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), search: Boolean(env.TAVILY_API_KEY || env.LLM_API_KEY), storage: createStore(env, fetchImpl).kind };
   // /api/health?search=1 runs one live web search through the agent's search tool.
   if (new URL(request.url).searchParams.get('search') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();

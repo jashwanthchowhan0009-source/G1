@@ -3,14 +3,28 @@
 
 import { parseDuration, parseWhen } from './datetime.js';
 
-const WAKE = /^(?:(?:hey|hi|ok|okay|hello|arre|are)\s+)?(?:g\s?1|g\s?one|gee\s?one|jee\s?one|ji\s?one|g-1|जी\s?वन)\b[\s,]*/i;
+// How phones hear "G1": speech recognisers often write it as "Jeevan", "Jivan", "Gee one" or "जी वन".
+const NAME = '(?:g\\s?-?\\s?(?:1|one|won|van|wan)|gee\\s?(?:1|one|van|wan)|ji{1,2}\\s?(?:1|one|van|wan)|jee\\s?(?:1|one|van|wan)|jee?vann?|jeewan|jivan|jiwan|jiwon|gvan|gwan|जी\\s?वन|जीवन|जी\\s?1)';
+const GREET = '(?:(?:hey|hi|hai|ok|okay|hello|arre|are|oye|oi|हे|अरे)[\\s,]+)';
+const WAKE = new RegExp(`^${GREET}?${NAME}(?![a-z\\u0900-\\u097F])[\\s,.!]*`, 'i');
+const WAKE_ANYWHERE = new RegExp(`(?:^|\\s)${GREET}${NAME}(?![a-z\\u0900-\\u097F])`, 'i');
 
 export function stripWake(text) {
-  return String(text || '').replace(WAKE, '').trim();
+  return String(text || '').trim().replace(WAKE, '').trim();
 }
 
 export function hasWake(text) {
-  return WAKE.test(String(text || '').trim()) || /\b(hey|ok|okay)\s+(g\s?1|g\s?one|gee\s?one|jee\s?one)\b/i.test(text);
+  const s = String(text || '').trim();
+  return WAKE.test(s) || WAKE_ANYWHERE.test(s);
+}
+
+/** "Jeevan, call Papa" becomes "G1, call Papa", so the screen and the brain see G1's real name. */
+export function normalizeWake(text) {
+  const s = String(text || '').trim();
+  const m = s.match(new RegExp(`^(${GREET})?${NAME}(?![a-z\\u0900-\\u097F])`, 'i'));
+  if (!m) return s;
+  const rest = s.slice(m[0].length).replace(/^[\s,.!]+/, '');
+  return `${m[1] ? m[1].trim().replace(/,$/, '') + ' ' : ''}G1${rest ? ', ' + rest : ''}`;
 }
 
 function clean(raw) {

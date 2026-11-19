@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
+import android.provider.Settings
 import android.provider.ContactsContract
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -42,6 +43,9 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         "notifications" to (if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray<String>()),
     )
 
+    @Volatile private var wakePending = false
+    private var wantWake = false // the owner asked for "Hey G1" and Android is asking for the mic
+
     private fun has(permission: String) = act.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
     private fun ui(block: () -> Unit) = act.runOnUiThread { block() }
 
@@ -64,18 +68,62 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
     fun permissions(): String {
         val out = JSONObject()
         for ((name, perms) in names) out.put(name, perms.isEmpty() || perms.any { has(it) })
+        out.put("wake", WakeService.isEnabled(act) && has(Manifest.permission.RECORD_AUDIO))
+        out.put("popup", Settings.canDrawOverlays(act))
         return out.toString()
     }
 
     /** Shows Android's own permission question for one connection. */
     @JavascriptInterface
     fun request(name: String) {
+        if (name == "wake") return ui { turnOnWake() }
+        if (name == "popup") {
+            start(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + act.packageName)))
+            return
+        }
         val perms = names[name] ?: return
         if (perms.isEmpty()) return permissionsChanged()
         ui { act.requestPermissions(perms, MainActivity.REQ_BRIDGE) }
     }
 
-    fun permissionsChanged() = emit("permissions", JSONObject().put("state", JSONObject(permissions())))
+    /** "Hey G1" even when G1 is closed: needs the microphone, and a notification while it listens. */
+    private fun turnOnWake() {
+        val missing = listOf(Manifest.permission.RECORD_AUDIO).plus(if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList())
+            .filter { !has(it) }
+        if (!has(Manifest.permission.RECORD_AUDIO)) {
+            wantWake = true
+            act.requestPermissions(missing.toTypedArray(), MainActivity.REQ_BRIDGE)
+            return
+        }
+        if (missing.isNotEmpty()) act.requestPermissions(missing.toTypedArray(), MainActivity.REQ_BRIDGE)
+        WakeService.setEnabled(act, true)
+        WakeService.send(act)
+        WakeService.send(act, WakeService.ACTION_PAUSE) // G1 is on screen right now
+        permissionsChanged()
+    }
+
+    /** MainActivity: G1 was opened by "Hey G1". The web app picks this up with takeWake(). */
+    fun wake() {
+        wakePending = true
+        emit("wake")
+    }
+
+    @JavascriptInterface
+    fun takeWake(): Boolean {
+        val w = wakePending
+        wakePending = false
+        return w
+    }
+
+    fun permissionsChanged() {
+        if (wantWake && has(Manifest.permission.RECORD_AUDIO)) {
+            wantWake = false
+            WakeService.setEnabled(act, true)
+            WakeService.send(act)
+            WakeService.send(act, WakeService.ACTION_PAUSE)
+        }
+        emit("permissions", JSONObject().put("state", JSONObject(permissions())))
+    }
 
     // ------------------------------------------------------------------ doing things
 

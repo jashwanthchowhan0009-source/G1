@@ -75,13 +75,23 @@ async function open(viewport) {
 }
 
 const said = (page) => page.locator('#said').textContent();
-const idle = (page) => page.waitForFunction(() => document.getElementById('screen').dataset.state === 'idle' && !window.__busy);
+// G1 keeps listening after a spoken reply; a moment of silence (the recogniser ending empty) lets it go idle
+const idle = async (page) => {
+  await page.waitForFunction(() => !window.__busy && document.getElementById('screen').dataset.state !== 'thinking' && document.getElementById('screen').dataset.state !== 'speaking');
+  await page.evaluate(() => { if (document.getElementById('screen').dataset.state !== 'listening') return; const r = window.__rec; window.__rec = null; r?.stop(); });
+  return page.waitForFunction(() => document.getElementById('screen').dataset.state === 'idle' && !window.__busy);
+};
 async function speak(page, text) {
   await page.waitForFunction(() => Boolean(window.__rec), null, { timeout: 5000 });
   const before = await page.evaluate(() => window.__spoken.length);
   await page.evaluate((t) => window.__say(t), text);
   await page.waitForFunction((n) => window.__spoken.length > n, before, { timeout: 8000 });
   await page.waitForTimeout(120);
+}
+
+/** After a spoken reply G1 keeps listening on its own (like a call); tap only when it is not. */
+async function tapToTalk(page) {
+  if ((await page.getAttribute('#mic', 'aria-label')) !== 'Stop listening') await page.click('#mic', { force: true });
 }
 
 // ---------------------------------------------------------------- desktop
@@ -97,7 +107,7 @@ async function speak(page, text) {
   await speak(page, 'save papa number 9876543210');
   assert.match(await said(page), /Saved papa/i);
 
-  await page.click('#mic');
+  await tapToTalk(page);
   await speak(page, 'Hey G1, papa ko whatsapp karo ki main 8 baje tak aa jaunga');
   assert.match(await said(page), /WhatsApp to papa: "main 8 baje tak aa jaunga"\. Send it\?/);
   assert.equal(await page.locator('#card.card-confirm .primary').count(), 1);
@@ -107,23 +117,23 @@ async function speak(page, text) {
   assert.deepEqual(await page.evaluate(() => window.__opened), ['https://wa.me/919876543210?text=main%208%20baje%20tak%20aa%20jaunga']);
   assert.equal(await page.locator('#card.card-action a.primary').getAttribute('href'), 'https://wa.me/919876543210?text=main%208%20baje%20tak%20aa%20jaunga');
 
-  await page.click('#mic');
+  await tapToTalk(page);
   await speak(page, "what's the weather in hyderabad");
   assert.match(await said(page), /28 degrees and partly cloudy in Hyderabad/);
   assert.equal(await page.locator('#card.card-weather .big').textContent(), '28');
   await page.screenshot({ path: OUT + '3-weather.png' });
 
-  await page.click('#mic');
+  await tapToTalk(page);
   await speak(page, 'set a timer for 10 minutes');
   assert.match(await page.locator('#card.card-timer .big').textContent(), /^(10:00|9:5\d)$/);
   await page.screenshot({ path: OUT + '4-timer.png' });
 
-  await page.click('#mic');
+  await tapToTalk(page);
   await speak(page, 'open instagram');
   assert.match(await said(page), /Scrolling feeds isn't my thing/);
 
   // listening state, for the picture
-  await page.click('#mic');
+  await tapToTalk(page);
   await page.waitForFunction(() => document.getElementById('screen').dataset.state === 'listening');
   await page.evaluate(() => (document.getElementById('heard').textContent = 'remind me to call the bank at'));
   await page.screenshot({ path: OUT + '5-listening.png' });

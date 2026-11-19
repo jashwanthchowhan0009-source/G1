@@ -3,9 +3,14 @@ package com.sherrbyte.g1
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.KeyguardManager
+import android.app.NotificationManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
@@ -83,6 +88,54 @@ class MainActivity : Activity() {
 
         web.addJavascriptInterface(bridge, "G1Native")
         web.loadUrl(BuildConfig.G1_URL)
+        if (WakeService.isEnabled(this)) WakeService.send(this) // "Hey G1" keeps working after G1 closes
+        handleWake(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWake(intent)
+    }
+
+    /** Opened by "Hey G1" or as the phone's assistant: screen on, ask for the unlock, then listen. */
+    private fun handleWake(i: Intent?) {
+        if (i == null) return
+        val woken = i.getBooleanExtra(EXTRA_WAKE, false) || i.action == Intent.ACTION_ASSIST || i.action == Intent.ACTION_VOICE_COMMAND
+        if (!woken) return
+        i.removeExtra(EXTRA_WAKE)
+        i.action = Intent.ACTION_MAIN
+        getSystemService(NotificationManager::class.java).cancel(WakeService.ID_WAKE)
+        val km = getSystemService(KeyguardManager::class.java)
+        if (Build.VERSION.SDK_INT >= 27) {
+            setTurnScreenOn(true)
+            if (km.isKeyguardLocked) {
+                // G1 can call and pay, so a locked phone must be unlocked by its owner first
+                setShowWhenLocked(true)
+                km.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                    override fun onDismissSucceeded() { setShowWhenLocked(false); bridge.wake() }
+                    override fun onDismissCancelled() { setShowWhenLocked(false); moveTaskToBack(true) }
+                    override fun onDismissError() { setShowWhenLocked(false); moveTaskToBack(true) }
+                })
+                return
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
+        }
+        bridge.wake()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (WakeService.isEnabled(this)) WakeService.send(this, WakeService.ACTION_PAUSE) // G1 on screen has the mic
+        bridge.permissionsChanged()
+    }
+
+    override fun onStop() {
+        bridge.stopListening(false)
+        if (WakeService.isEnabled(this)) WakeService.send(this, WakeService.ACTION_RESUME)
+        super.onStop()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -112,5 +165,6 @@ class MainActivity : Activity() {
     companion object {
         const val REQ_WEB = 41
         const val REQ_BRIDGE = 42
+        const val EXTRA_WAKE = "g1.wake"
     }
 }
