@@ -14,13 +14,16 @@ android {
         applicationId = "com.sherrbyte.g1"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.2.1"
+        // Every GitHub build is newer than the last, so the app can update itself (see Updater.kt)
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        versionCode = if (run != null) run + 100 else 4
+        versionName = if (run != null) "0.3.$run" else "0.3.0-dev"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones only: keeps the APK small
         buildConfigField("String", "G1_URL", "\"$g1Url\"")
     }
     // Same key on every build, so a new APK installs over the old one.
-    // Set GitHub secrets G1_KEYSTORE_B64 (base64 .jks) and G1_KEYSTORE_PASS; without them the debug key is used.
+    // Set the GitHub secret G1_KEYSTORE_PASS (12+ characters): the build makes a key once and keeps it encrypted.
+    // Without it the debug key is used and every build needs an uninstall.
     val ks = System.getenv("G1_KEYSTORE_FILE")
     if (!ks.isNullOrBlank()) {
         signingConfigs.create("g1") {

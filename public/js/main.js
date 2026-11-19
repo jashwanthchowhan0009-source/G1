@@ -379,6 +379,7 @@ const CONNECTIONS = [
   ['notifications', 'Notifications', 'Reminders when the screen is off'],
   ['wake', 'Hey G1, anytime', 'Wake G1 by voice even when it is closed. Offline, on this phone only'],
   ['popup', 'Open instantly', 'Lets "Hey G1" open G1 straight away (Display over other apps)'],
+  ['update', 'Updates', 'G1 updates itself when a new version is out'],
 ];
 function fillConnections() {
   const state = platform.permissions();
@@ -406,7 +407,7 @@ function fillConnections() {
     } else {
       action = document.createElement('button');
       action.type = 'button';
-      action.textContent = 'Allow';
+      action.textContent = key === 'update' ? 'Check now' : 'Allow';
       action.onclick = () => platform.requestPermission(key);
     }
     row.append(text, action);

@@ -162,3 +162,11 @@ Settings → Connections → **Hey G1, anytime** → Allow. G1 then listens for 
 - Optional: Settings → Apps → Default apps → Digital assistant → G1, to open it with a long-press of power/home.
 - After a restart, open G1 once; Android only lets the microphone start while the app is on screen.
 - Talk like a call: after G1 answers it keeps listening. Stay quiet or say "bas" to end.
+
+### One link, automatic updates
+
+- Install: **https://g-one-two.vercel.app/download** (always the latest G1.apk).
+- G1 checks for a new version each time it opens and offers it; the first update needs one tap and "allow installs from G1", later ones can install quietly (Android 12+).
+- Requires the GitHub secret `G1_KEYSTORE_PASS` (12+ characters, any password you choose). The build then creates G1's signing key once and keeps it in the release only encrypted with that password, so every build installs over the last one. Never change or lose that password.
+- The screen, brain and skills come from the web app, so most improvements reach the phone instantly without any update.
+

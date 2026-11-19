@@ -90,6 +90,7 @@ class MainActivity : Activity() {
         web.loadUrl(BuildConfig.G1_URL)
         if (WakeService.isEnabled(this)) WakeService.send(this) // "Hey G1" keeps working after G1 closes
         handleWake(intent)
+        Updater.check(this) // new version on GitHub? offer it
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -130,6 +131,7 @@ class MainActivity : Activity() {
         super.onResume()
         if (WakeService.isEnabled(this)) WakeService.send(this, WakeService.ACTION_PAUSE) // G1 on screen has the mic
         bridge.permissionsChanged()
+        Updater.resume(this)
     }
 
     override fun onStop() {

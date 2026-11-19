@@ -21,11 +21,31 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Signing key (optional)
+      - name: Signing key (same key every build, so updates install over the old app)
         env:
           KS: ${{ secrets.G1_KEYSTORE_B64 }}
+          PASS: ${{ secrets.G1_KEYSTORE_PASS }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/g1.jks"; echo "G1_KEYSTORE_FILE=$RUNNER_TEMP/g1.jks" >> "$GITHUB_ENV"; fi
+          set -e
+          key="$RUNNER_TEMP/g1.jks"
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$key"
+          elif [ ${#PASS} -ge 12 ]; then
+            # The key lives in the release only encrypted with the owner's password (a GitHub secret).
+            if gh release download apk-latest -R "$GITHUB_REPOSITORY" -p g1-signing.enc -D "$RUNNER_TEMP" 2>/dev/null; then
+              openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$RUNNER_TEMP/g1-signing.enc" -out "$key" -pass env:PASS
+            else
+              keytool -genkeypair -keystore "$key" -storetype PKCS12 -storepass "$PASS" -keypass "$PASS" \
+                -alias g1 -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=G1, O=SherrByte"
+              openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$key" -out "$RUNNER_TEMP/g1-signing.enc" -pass env:PASS
+              echo "NEW_SIGNING_KEY=$RUNNER_TEMP/g1-signing.enc" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "::warning::Set the GitHub secret G1_KEYSTORE_PASS (12+ characters) so updates install over the old app."
+            exit 0
+          fi
+          echo "G1_KEYSTORE_FILE=$key" >> "$GITHUB_ENV"
       - name: Wake-word model (offline, Indian English)
         run: |
           set -e
@@ -43,8 +63,12 @@ jobs:
         env:
           G1_KEYSTORE_PASS: ${{ secrets.G1_KEYSTORE_PASS }}
         run: gradle -p android assembleDebug --no-daemon --stacktrace
-      - name: Name the APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk G1.apk
+      - name: Name the APK and write version.json (the app checks it to update itself)
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk G1.apk
+          signed=false; [ -n "$G1_KEYSTORE_FILE" ] && signed=true
+          echo "{\"versionCode\": $((GITHUB_RUN_NUMBER + 100)), \"versionName\": \"0.3.$GITHUB_RUN_NUMBER\", \"signed\": $signed, \"bytes\": $(stat -c %s G1.apk)}" > version.json
+          cat version.json
       - uses: actions/upload-artifact@v4
         with:
           name: G1-apk
@@ -54,6 +78,13 @@ jobs:
         with:
           tag_name: apk-latest
           name: G1 Android app (latest build)
-          body: Install G1.apk on an Android phone (8.0 or newer). Allow "install unknown apps" for your browser when asked.
-          files: G1.apk
+          body: Install G1.apk on an Android phone (8.0 or newer). Allow "install unknown apps" for your browser when asked. After that G1 updates itself.
+          files: |
+            G1.apk
+            version.json
           make_latest: true
+      - name: Keep the new signing key (encrypted)
+        if: env.NEW_SIGNING_KEY != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload apk-latest "$NEW_SIGNING_KEY" -R "$GITHUB_REPOSITORY" --clobber

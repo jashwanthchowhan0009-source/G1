@@ -3,7 +3,9 @@
   "buildCommand": "",
   "installCommand": "",
   "outputDirectory": "public",
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "functions": {
     "api/telegram.js": {
       "maxDuration": 60
@@ -17,5 +19,17 @@
     "api/read.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/download",
+      "destination": "https://github.com/jashwanthchowhan0009-source/G1/releases/download/apk-latest/G1.apk",
+      "permanent": false
+    },
+    {
+      "source": "/app",
+      "destination": "https://github.com/jashwanthchowhan0009-source/G1/releases/download/apk-latest/G1.apk",
+      "permanent": false
+    }
+  ]
 }

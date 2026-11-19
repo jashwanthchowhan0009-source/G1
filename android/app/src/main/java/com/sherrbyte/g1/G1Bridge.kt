@@ -70,6 +70,7 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         for ((name, perms) in names) out.put(name, perms.isEmpty() || perms.any { has(it) })
         out.put("wake", WakeService.isEnabled(act) && has(Manifest.permission.RECORD_AUDIO))
         out.put("popup", Settings.canDrawOverlays(act))
+        out.put("update", false) // a button: "Check now"
         return out.toString()
     }
 
@@ -77,6 +78,7 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
     @JavascriptInterface
     fun request(name: String) {
         if (name == "wake") return ui { turnOnWake() }
+        if (name == "update") return ui { Updater.check(act, force = true) }
         if (name == "popup") {
             start(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + act.packageName)))
             return
