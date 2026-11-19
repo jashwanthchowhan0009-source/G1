@@ -272,7 +272,9 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
             val engine = tts
             if (engine == null || !ttsReady) emit("tts", JSONObject().put("kind", "done"))
             else {
-                engine.language = Locale.forLanguageTag(lang)
+                val loc = Locale.forLanguageTag(lang)
+                val v = voices.getOrPut(lang) { bestVoice(engine, loc) }
+                if (v != null) engine.voice = v else engine.language = loc
                 engine.setSpeechRate(rate.toFloat())
                 engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "g1")
             }
@@ -289,6 +291,20 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
                 say()
             }
         } else say()
+    }
+
+    private val voices = HashMap<String, android.speech.tts.Voice?>()
+
+    /** The most natural installed voice for the language: right country, highest quality, Google's network voices first. */
+    private fun bestVoice(engine: TextToSpeech, loc: Locale): android.speech.tts.Voice? = try {
+        engine.voices
+            ?.filter { it.locale.language == loc.language && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            ?.maxByOrNull { v ->
+                (if (v.locale.country == loc.country) 1000 else 0) + v.quality +
+                    (if (v.isNetworkConnectionRequired) 150 else 0) - v.latency / 2
+            }
+    } catch (e: Exception) {
+        null
     }
 
     @JavascriptInterface

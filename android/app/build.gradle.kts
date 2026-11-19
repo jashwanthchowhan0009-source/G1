@@ -14,8 +14,8 @@ android {
         applicationId = "com.sherrbyte.g1"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.2.1"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones only: keeps the APK small
         buildConfigField("String", "G1_URL", "\"$g1Url\"")
     }

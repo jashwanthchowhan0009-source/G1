@@ -8,11 +8,15 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
@@ -100,16 +104,31 @@ class WakeService : Service(), RecognitionListener {
         speech = null
     }
 
-    private fun heard(json: String?) {
-        val text = try { JSONObject(json ?: return).optString("text") } catch (e: Exception) { return }
-        if (!WAKE.containsMatchIn(text)) return
+    private fun heard(json: String?, partial: Boolean = false) {
+        val text = try { JSONObject(json ?: return).optString(if (partial) "partial" else "text") } catch (e: Exception) { return }
+        // "Hey G1" fires the moment it is heard; a bare "G1" or "Jeevan" waits for the pause, to avoid false wakes
+        if (!(if (partial) WAKE_FAST else WAKE).containsMatchIn(text)) return
         val now = System.currentTimeMillis()
         if (now - lastWake < 4000) return
         lastWake = now
         Log.i(TAG, "wake: $text")
         paused = true
         release() // hand the microphone to G1
+        cue()
         wake()
+    }
+
+    /** A short tone and buzz the moment "Hey G1" is heard, so the owner knows to speak. */
+    private fun cue() {
+        try {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70).also {
+                it.startTone(ToneGenerator.TONE_PROP_ACK, 150)
+                handler.postDelayed({ it.release() }, 400)
+            }
+        } catch (e: Exception) {}
+        try {
+            getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
+        } catch (e: Exception) {}
     }
 
     /** Screen on, G1 open and listening. */
@@ -138,7 +157,7 @@ class WakeService : Service(), RecognitionListener {
         getSystemService(NotificationManager::class.java).notify(ID_WAKE, n)
     }
 
-    override fun onPartialResult(hypothesis: String?) {}
+    override fun onPartialResult(hypothesis: String?) = heard(hypothesis, partial = true)
     override fun onResult(hypothesis: String?) = heard(hypothesis)
     override fun onFinalResult(hypothesis: String?) = heard(hypothesis)
     override fun onError(exception: Exception?) { Log.e(TAG, "wake error", exception); release(); if (!paused) handler.postDelayed(retry, 3000) }
@@ -164,6 +183,7 @@ class WakeService : Service(), RecognitionListener {
         // Only these phrases can be recognised; everything else comes out as [unk].
         private const val GRAMMAR = "[\"hey g one\", \"hi g one\", \"ok g one\", \"g one\", \"hey jeevan\", \"jeevan\", \"hey gee one\", \"[unk]\"]"
         private val WAKE = Regex("\\b(g one|gee one|jeevan)\\b")
+        private val WAKE_FAST = Regex("\\b(hey|hi|ok) (g one|gee one|jeevan)\\b")
 
         fun isEnabled(c: Context) = c.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("wake", false)
         fun setEnabled(c: Context, on: Boolean) = c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("wake", on).apply()

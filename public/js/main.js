@@ -6,7 +6,7 @@ import { createScheduler } from './core/scheduler.js';
 import { createBrain } from './core/brain.js';
 import { createLLM } from './core/llm.js';
 import { createCoreLink } from './core/corelink.js';
-import { hasWake, normalizeWake } from './core/nlu.js';
+import { hasWake, normalizeWake, parseIntent } from './core/nlu.js';
 import { sayClock } from './core/datetime.js';
 import { createSkills } from './skills/index.js';
 import { createPlatform } from './platform.js';
@@ -26,6 +26,7 @@ let state = 'idle';
 let busy = false;
 let followUpUntil = 0;
 let queued = '';
+let lastHeard = '';
 let lastViaVoice = false; // the last request was spoken: keep the conversation going after the reply
 let chipPrefix = ''; // a shortcut chip was tapped: the next thing heard completes it
 
@@ -136,6 +137,7 @@ async function hear(text, { voice: spoken = false } = {}) {
   text = String(text || '').trim();
   if (!text) return;
   lastViaVoice = spoken;
+  lastHeard = text;
   if (chipPrefix) {
     // "Call" chip + "Papa" becomes "call Papa", unless the user said a full request anyway
     if (!/^(call|send|tell|whatsapp|message|remind|pay|what|set|play|open|stop|cancel|no|nahi)\b/i.test(text)) text = chipPrefix + text;
@@ -190,7 +192,10 @@ async function present(reply) {
 }
 
 function afterReply(reply) {
-  if (reply?.stop) return; // "bas", "stop", "thank you": the conversation is over
+  if (reply?.stop) return; // "bas", "stop": the conversation is over
+  const said = parseIntent(lastHeard);
+  if (said?.tool === '_chat' && (said.args.kind === 'thanks' || said.args.kind === 'bye')) return; // "thank you", "bye"
+
   // A spoken conversation keeps going like a phone call: after G1 answers it listens again, no tap and no
   // "Hey G1" needed. Silence ends it.
   const talking = reply?.expectReply || (lastViaVoice && reply);
