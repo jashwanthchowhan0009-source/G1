@@ -14,8 +14,8 @@ android {
         applicationId = "com.sherrbyte.g1"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         buildConfigField("String", "G1_URL", "\"$g1Url\"")
     }
     // Same key on every build, so a new APK installs over the old one.

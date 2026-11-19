@@ -346,7 +346,6 @@ const CONNECTIONS = [
   ['microphone', 'Microphone', 'So G1 can hear you'],
   ['contacts', 'Contacts', 'Call and message people by name'],
   ['calls', 'Phone calls', 'Place calls for you'],
-  ['sms', 'SMS', 'Send texts, only after you say yes'],
   ['camera', 'Camera', 'Photos and "what is this?"'],
   ['location', 'Location', 'Weather, directions, places near you'],
   ['notifications', 'Notifications', 'Reminders when the screen is off'],

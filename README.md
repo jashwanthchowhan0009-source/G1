@@ -58,7 +58,8 @@ Then in G1: **Settings → Connections → Allow** for Microphone, Contacts, Cal
 | With the app | |
 |---|---|
 | Contacts | Names come from the phone's address book |
-| Calls, SMS | Placed and sent by G1 after your "haan", no extra tap |
+| Calls | Placed by G1 after your "haan", no extra tap |
+| SMS | Opens your SMS app with the text ready; you tap send (an app that sends SMS itself is blocked by Play Protect in India when not installed from the Play Store) |
 | WhatsApp | Opens straight in WhatsApp with the message; you tap send |
 | Instagram, Facebook | "Share ... on Instagram" opens the app with the text |
 | Alarms | Set in the phone's clock, ring even when G1 is closed |

@@ -37,7 +37,6 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         "microphone" to arrayOf(Manifest.permission.RECORD_AUDIO),
         "contacts" to arrayOf(Manifest.permission.READ_CONTACTS),
         "calls" to arrayOf(Manifest.permission.CALL_PHONE),
-        "sms" to arrayOf(Manifest.permission.SEND_SMS),
         "camera" to arrayOf(Manifest.permission.CAMERA),
         "location" to arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION),
         "notifications" to (if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray<String>()),
