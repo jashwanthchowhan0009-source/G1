@@ -92,7 +92,7 @@ async function readJson(request) {
 }
 
 export async function health(request, env, fetchImpl = fetch) {
-  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(env.ELEVENLABS_API_KEY), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-flash-lite-latest', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), search: Boolean(env.TAVILY_API_KEY || env.LLM_API_KEY), storage: createStore(env, fetchImpl).kind };
+  const info = { ok: true, llm: Boolean(env.LLM_API_KEY), tts: Boolean(ttsEngine(env)), ttsEngine: ttsEngine(env), locked: Boolean(env.G1_PASSCODE), model: env.LLM_MODEL || 'gemini-flash-lite-latest', telegram: Boolean(env.TELEGRAM_BOT_TOKEN), search: Boolean(env.TAVILY_API_KEY || env.LLM_API_KEY), storage: createStore(env, fetchImpl).kind };
   // /api/health?search=1 runs one live web search through the agent's search tool.
   if (new URL(request.url).searchParams.get('search') && env.LLM_API_KEY && !locked(request, env)) {
     const started = Date.now();
@@ -120,6 +120,15 @@ export async function health(request, env, fetchImpl = fetch) {
     }
   }
   // /api/health?models=1 lists the model names this key can use.
+  if (new URL(request.url).searchParams.get('speak') && geminiTtsReady(env) && !locked(request, env)) {
+    const t0 = Date.now();
+    try {
+      const { wav, model } = await geminiSpeak(env, 'Haan bolo, main sun raha hoon.', 'Achird', fetchImpl);
+      info.speak = { ok: true, ms: Date.now() - t0, model, bytes: wav.length };
+    } catch (e) {
+      info.speak = { ok: false, ms: Date.now() - t0, error: e.message };
+    }
+  }
   if (new URL(request.url).searchParams.get('models') && env.LLM_API_KEY && !locked(request, env)) {
     try {
       const r = await timedFetch(fetchImpl, llmTarget(env).base + '/models', { headers: { Authorization: 'Bearer ' + env.LLM_API_KEY } }, 10000);
@@ -158,9 +167,80 @@ export async function chat(request, env, fetchImpl = fetch) {
   return new Response(r.text, { status: r.status, headers: { 'Content-Type': r.type, 'Cache-Control': 'no-store', 'x-g1-model': r.model } });
 }
 
+// ---------------------------------------------------------------- natural voice
+// ElevenLabs when its key is set; otherwise Gemini's speech models with the same AI key (no extra signup).
+const GEMINI_TTS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts', 'gemini-2.5-flash-preview-tts'];
+const GEMINI_VOICES = new Set(['Achird', 'Umbriel', 'Sulafat', 'Aoede', 'Callirrhoe', 'Puck', 'Charon', 'Kore', 'Leda', 'Zephyr', 'Orus', 'Algieba', 'Despina', 'Vindemiatrix']);
+let ttsGood = { model: '', until: 0 };
+
+export const geminiTtsReady = (env) => Boolean(env.LLM_API_KEY) && (!env.LLM_BASE_URL || /generativelanguage\.googleapis\.com/.test(env.LLM_BASE_URL));
+export const ttsEngine = (env) => (env.ELEVENLABS_API_KEY ? 'elevenlabs' : geminiTtsReady(env) ? 'gemini' : '');
+
+/** 16-bit mono PCM (what Gemini returns) wrapped as a .wav any phone can play. */
+export function pcmToWav(pcm, rate = 24000) {
+  const head = new DataView(new ArrayBuffer(44));
+  const w = (o, str) => [...str].forEach((c, i) => head.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF');
+  head.setUint32(4, 36 + pcm.length, true);
+  w(8, 'WAVEfmt ');
+  head.setUint32(16, 16, true);
+  head.setUint16(20, 1, true);
+  head.setUint16(22, 1, true);
+  head.setUint32(24, rate, true);
+  head.setUint32(28, rate * 2, true);
+  head.setUint16(32, 2, true);
+  head.setUint16(34, 16, true);
+  w(36, 'data');
+  head.setUint32(40, pcm.length, true);
+  const out = new Uint8Array(44 + pcm.length);
+  out.set(new Uint8Array(head.buffer), 0);
+  out.set(pcm, 44);
+  return out;
+}
+
+/** Text -> { wav, model } with Gemini speech, trying the fastest model that answers. */
+export async function geminiSpeak(env, text, voice, fetchImpl = fetch) {
+  const name = GEMINI_VOICES.has(voice) ? voice : 'Achird';
+  const order = Date.now() < ttsGood.until ? [ttsGood.model, ...GEMINI_TTS.filter((m) => m !== ttsGood.model)] : GEMINI_TTS;
+  let last = { status: 502, error: 'no voice model answered' };
+  for (const model of order) {
+    let res;
+    try {
+      res = await timedFetch(fetchImpl, `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.LLM_API_KEY },
+        body: JSON.stringify({
+          // the style line is direction for the voice; only the words after it are spoken
+          contents: [{ parts: [{ text: `Say this warmly and naturally, like a close friend talking, with a light Indian accent: ${text}` }] }],
+          generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: name } } } },
+        }),
+      }, 9000);
+    } catch {
+      last = { status: 504, error: `${model} timed out` };
+      continue;
+    }
+    if (res.status < 200 || res.status > 299) {
+      last = { status: res.status, error: `${model} answered ${res.status}` };
+      continue;
+    }
+    try {
+      const j = JSON.parse(res.text);
+      const part = j?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+      if (!part) throw new Error('no audio');
+      const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || '')?.[1]) || 24000;
+      const pcm = Uint8Array.from(atob(part.inlineData.data), (c) => c.charCodeAt(0));
+      ttsGood = { model, until: Date.now() + 15 * 60000 };
+      return { wav: pcmToWav(pcm, rate), model };
+    } catch {
+      last = { status: 502, error: `${model} sent no audio` };
+    }
+  }
+  throw Object.assign(new Error(last.error), { status: last.status });
+}
+
 export async function tts(request, env, fetchImpl = fetch) {
   if (request.method !== 'POST') return json({ error: 'Use POST' }, 405);
-  if (!env.ELEVENLABS_API_KEY) return json({ error: 'ELEVENLABS_API_KEY is not set on the server' }, 503);
+  if (!ttsEngine(env)) return json({ error: 'No voice service: set ELEVENLABS_API_KEY or a Gemini LLM_API_KEY' }, 503);
   if (locked(request, env)) return json({ error: 'Wrong or missing G1 passcode' }, 401);
   let body;
   try {
@@ -171,6 +251,14 @@ export async function tts(request, env, fetchImpl = fetch) {
   const text = String(body.text || '').slice(0, MAX_SPEECH_CHARS);
   const voice = String(body.voice_id || '');
   if (!text.trim()) return json({ error: 'text is required' }, 400);
+  if (!env.ELEVENLABS_API_KEY) {
+    try {
+      const { wav, model } = await geminiSpeak(env, text, String(body.gemini_voice || ''), fetchImpl);
+      return new Response(wav, { status: 200, headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store', 'x-g1-voice': model } });
+    } catch (e) {
+      return json({ error: e.message }, e.status === 429 ? 429 : 502);
+    }
+  }
   if (!/^[A-Za-z0-9]{10,40}$/.test(voice)) return json({ error: 'voice_id is invalid' }, 400);
   let res;
   try {

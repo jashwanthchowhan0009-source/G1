@@ -18,6 +18,9 @@
     },
     "api/read.js": {
       "maxDuration": 30
+    },
+    "api/speak.js": {
+      "maxDuration": 30
     }
   },
   "redirects": [

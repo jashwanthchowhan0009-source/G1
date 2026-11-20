@@ -1,11 +1,11 @@
 // User settings, persisted on the device.
 
 export const VOICE_PRESETS = [
-  { id: 'siddhu', label: 'Siddhu, friendly', voiceId: 'iLrek0aeAREetkK9NhwJ' },
-  { id: 'shlok', label: 'Shlok, warm', voiceId: '2i7LhYjvw41fgbcqlf3Z' },
-  { id: 'pyaari', label: 'Pyaari, Hinglish', voiceId: 'EHeVIpHOvJGuhp2QcMZZ' },
-  { id: 'benne', label: 'Benne, South Indian', voiceId: 'Cjxf7lo0ZVGyj0CtWa8q' },
-  { id: 'vanishree', label: 'Vanishree, casual', voiceId: 'EQajdcMa8fccc3KCqwGO' },
+  { id: 'siddhu', label: 'Siddhu, friendly', voiceId: 'iLrek0aeAREetkK9NhwJ', gemini: 'Achird' },
+  { id: 'shlok', label: 'Shlok, warm', voiceId: '2i7LhYjvw41fgbcqlf3Z', gemini: 'Umbriel' },
+  { id: 'pyaari', label: 'Pyaari, Hinglish', voiceId: 'EHeVIpHOvJGuhp2QcMZZ', gemini: 'Sulafat' },
+  { id: 'benne', label: 'Benne, South Indian', voiceId: 'Cjxf7lo0ZVGyj0CtWa8q', gemini: 'Aoede' },
+  { id: 'vanishree', label: 'Vanishree, casual', voiceId: 'EQajdcMa8fccc3KCqwGO', gemini: 'Callirrhoe' },
 ];
 
 export const LLM_PRESETS = {
@@ -83,6 +83,10 @@ export function createSettings(store) {
       const { tts } = current;
       if (tts.voiceId) return tts.voiceId;
       return (VOICE_PRESETS.find((p) => p.id === tts.preset) || VOICE_PRESETS[0]).voiceId;
+    },
+    /** The matching Gemini voice, used when the server speaks with Gemini. */
+    geminiVoice() {
+      return (VOICE_PRESETS.find((p) => p.id === current.tts.preset) || VOICE_PRESETS[0]).gemini;
     },
   };
 }

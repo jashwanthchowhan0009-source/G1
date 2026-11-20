@@ -1,4 +1,4 @@
-// G1's voice. Natural voice (ElevenLabs) when a key or server is available, the device's best voice otherwise.
+// G1's voice. Natural voice (ElevenLabs, or Gemini through the G1 server) when available, the device's best voice otherwise.
 
 import { VOICE_PRESETS } from '../core/settings.js';
 import { has, nativeCall, onNative } from '../native.js';
@@ -64,12 +64,21 @@ export function createVoice({ settings, getServer = () => ({}), fetch: fetchImpl
   async function fetchClip(route, text) {
     const voice = settings.voiceId();
     const model = cfg().language === 'te-IN' ? 'eleven_v3' : 'eleven_flash_v2_5';
-    const res = await fetchImpl(route.url(voice), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...route.headers },
-      body: JSON.stringify(route.viaServer ? { text, voice_id: voice, model_id: model } : { text, model_id: model }),
-    });
-    if (!res.ok) throw new Error(`voice service ${res.status}`);
+    // a slow natural voice is worse than the phone's own: give up after a few seconds
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    let res;
+    try {
+      res = await fetchImpl(route.url(voice), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...route.headers },
+        body: JSON.stringify(route.viaServer ? { text, voice_id: voice, model_id: model, gemini_voice: settings.geminiVoice?.() } : { text, model_id: model }),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw Object.assign(new Error(`voice service ${res.status}`), { status: res.status });
     return URL.createObjectURL(await res.blob());
   }
 
@@ -171,7 +180,7 @@ export function createVoice({ settings, getServer = () => ({}), fetch: fetchImpl
           } catch (e) {
             // natural voice failed: use the device voice now, and for the next minute
             lastError = String(e.message || e);
-            elevenDownUntil = Date.now() + 60000;
+            elevenDownUntil = Date.now() + (e.status === 429 ? 15 * 60000 : 60000); // out of free quota: rest longer
           }
         }
         for (const p of parts) {

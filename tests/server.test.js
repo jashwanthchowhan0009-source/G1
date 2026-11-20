@@ -10,7 +10,7 @@ const upstreamOk = (calls) => async (url, init) => {
 };
 
 test('health reports what is configured, and ?test=1 makes one AI call', async () => {
-  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, locked: false, model: 'gemini-flash-lite-latest', telegram: false, search: false, storage: 'memory' });
+  assert.deepEqual(await (await health(new Request('http://x/api/health'), {})).json(), { ok: true, llm: false, tts: false, ttsEngine: '', locked: false, model: 'gemini-flash-lite-latest', telegram: false, search: false, storage: 'memory' });
   const calls = [];
   const j = await (await health(new Request('http://x/api/health?test=1'), ENV, upstreamOk(calls))).json();
   assert.equal(j.test.status, 200);
@@ -95,4 +95,24 @@ test('the model that answered last is tried first', async () => {
   tried.length = 0;
   await chat(post('/api/llm', { messages: [] }), ENV, f);
   assert.deepEqual(tried, ['gemini-flash-lite-latest']);
+});
+
+test('natural voice: with only a Gemini key the server speaks through Gemini and returns a wav', async () => {
+  const { tts } = await import('../server/handlers.js');
+  const pcm = btoa(String.fromCharCode(...new Uint8Array(480)));
+  const seen = [];
+  const f = async (url, init) => {
+    seen.push({ url, body: JSON.parse(init.body) });
+    if (url.includes('3.8-flash-lite-tts')) return new Response('{}', { status: 429 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcm } }] } }] }), { status: 200 });
+  };
+  const res = await tts(new Request('http://x/api/speak', { method: 'POST', body: JSON.stringify({ text: 'Haan ho gaya', voice_id: 'iLrek0aeAREetkK9NhwJ', gemini_voice: 'Sulafat' }) }), { LLM_API_KEY: 'k' }, f);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'audio/wav');
+  assert.equal(res.headers.get('x-g1-voice'), 'gemini-3.8-flash-tts');
+  const wav = new Uint8Array(await res.arrayBuffer());
+  assert.equal(String.fromCharCode(...wav.slice(0, 4)), 'RIFF');
+  assert.equal(wav.length, 44 + 480);
+  assert.equal(seen[1].body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Sulafat');
+  assert.match(seen[1].body.contents[0].parts[0].text, /Haan ho gaya$/);
 });
