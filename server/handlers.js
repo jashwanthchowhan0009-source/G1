@@ -75,9 +75,9 @@ export function llmTarget(env) {
   return { base, isGemini: /generativelanguage\.googleapis\.com/.test(base), model: env.LLM_MODEL || 'gemini-flash-lite-latest' };
 }
 
-const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+export const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
-function locked(request, env) {
+export function locked(request, env) {
   return Boolean(env.G1_PASSCODE) && request.headers.get('x-g1-pass') !== env.G1_PASSCODE;
 }
 

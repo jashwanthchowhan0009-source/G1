@@ -21,6 +21,12 @@
     },
     "api/speak.js": {
       "maxDuration": 30
+    },
+    "api/health.js": {
+      "maxDuration": 60
+    },
+    "api/live.js": {
+      "maxDuration": 15
     }
   },
   "redirects": [
