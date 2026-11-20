@@ -18,7 +18,7 @@
     <main class="screen" id="screen" data-state="idle">
       <header class="status">
         <time id="clock">--:--</time>
-        <span class="status-right"><span id="mode">Basic</span><span id="battery"></span></span>
+        <span class="status-right"><span id="mode">Basic</span><span id="battery"></span><button class="apps-btn" id="appsBtn" type="button" hidden>Apps</button></span>
       </header>
 
       <p class="notice" id="notice" role="status" hidden></p>
@@ -67,6 +67,19 @@
         <button class="primary" id="startBtn" type="button">Start G1</button>
         <p class="start-small">G1 will ask to use the microphone.</p>
       </div>
+
+      <dialog class="sheet" id="appsSheet" aria-labelledby="appsTitle">
+        <form method="dialog">
+          <div class="sheet-head">
+            <h2 id="appsTitle">Apps</h2>
+            <button class="ghost" value="close" aria-label="Close apps">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <input class="apps-find" id="appsFind" type="search" placeholder="Find an app (or just ask G1)" autocomplete="off" />
+          <div class="apps-list" id="appsList"></div>
+        </form>
+      </dialog>
 
       <dialog class="sheet" id="settings" aria-labelledby="settingsTitle">
         <form method="dialog" id="settingsForm">

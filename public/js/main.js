@@ -220,6 +220,49 @@ function wakeUp() {
 }
 onNative('wake', wakeUp);
 
+// ---------------------------------------------------------------- apps (G1 as the home screen)
+function fillApps() {
+  const list = $('appsList');
+  const q = $('appsFind').value.trim().toLowerCase();
+  const apps = platform.apps().filter((a) => !q || a.name.toLowerCase().includes(q));
+  list.replaceChildren();
+  if (!apps.length) {
+    const p = document.createElement('p');
+    p.textContent = q ? T('No app by that name.', 'Is naam ka koi app nahi.') : T('No apps found.', 'Koi app nahi mila.');
+    list.append(p);
+    return;
+  }
+  for (const a of apps) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = a.name;
+    b.onclick = () => {
+      $('appsSheet').close();
+      platform.openApp(a.id);
+    };
+    list.append(b);
+  }
+}
+if (platform.apps().length) $('appsBtn').hidden = false;
+$('appsBtn').addEventListener('click', () => {
+  voice.stop();
+  ears.pause();
+  $('appsFind').value = '';
+  fillApps();
+  $('appsSheet').showModal();
+});
+$('appsFind').addEventListener('input', fillApps);
+$('appsFind').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  $('appsList').querySelector('button')?.click(); // Enter opens the first match
+});
+// Home pressed while G1 is the home screen: close everything, back to the main screen
+onNative('home', () => {
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  voice.stop();
+});
+
 /** A timer, alarm or reminder is due. */
 async function announce(item) {
   if (item.repeat === 'daily') scheduler.add({ ...item, at: item.at + Math.ceil((Date.now() - item.at + 1) / 86400000) * 86400000 });
@@ -380,6 +423,7 @@ const CONNECTIONS = [
   ['wake', 'Hey G1, anytime', 'Wake G1 by voice even when it is closed. Offline, on this phone only'],
   ['popup', 'Open instantly', 'Lets "Hey G1" open G1 straight away (Display over other apps)'],
   ['update', 'Updates', 'G1 updates itself when a new version is out'],
+  ['home', 'G1 as home screen', 'No app grid, no scrolling. Ask G1 or tap Apps'],
 ];
 function fillConnections() {
   const state = platform.permissions();

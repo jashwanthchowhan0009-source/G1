@@ -1,8 +1,10 @@
 package com.sherrbyte.g1
 
+import android.app.SearchManager
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.provider.MediaStore
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -71,6 +73,7 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         out.put("wake", WakeService.isEnabled(act) && has(Manifest.permission.RECORD_AUDIO))
         out.put("popup", Settings.canDrawOverlays(act))
         out.put("update", false) // a button: "Check now"
+        out.put("home", isHome())
         return out.toString()
     }
 
@@ -79,6 +82,10 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
     fun request(name: String) {
         if (name == "wake") return ui { turnOnWake() }
         if (name == "update") return ui { Updater.check(act, force = true) }
+        if (name == "home") {
+            if (!start(Intent(Settings.ACTION_HOME_SETTINGS))) start(Intent(Settings.ACTION_SETTINGS))
+            return
+        }
         if (name == "popup") {
             start(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + act.packageName)))
             return
@@ -180,6 +187,61 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         if (pkg != null && start(Intent(send).setPackage(pkg))) return "opened"
         return if (start(Intent.createChooser(send, "Share with"))) "opened" else "blocked"
     }
+
+    // ------------------------------------------------------------------ G1 as the home screen
+
+    /** Every app the owner can open: [{"name":"YouTube","id":"com.google.android.youtube"}], A to Z. */
+    @JavascriptInterface
+    fun apps(): String {
+        val pm = act.packageManager
+        val out = JSONArray()
+        try {
+            pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+                .map { it.loadLabel(pm).toString() to it.activityInfo.packageName }
+                .filter { it.second != act.packageName }
+                .distinctBy { it.second }
+                .sortedBy { it.first.lowercase() }
+                .forEach { out.put(JSONObject().put("name", it.first).put("id", it.second)) }
+        } catch (e: Exception) {
+            // no list is better than a crash
+        }
+        return out.toString()
+    }
+
+    @JavascriptInterface
+    fun openApp(id: String): Boolean = act.packageManager.getLaunchIntentForPackage(id)?.let { start(it) } ?: false
+
+    /**
+     * Plays or finds something in a media app. Music apps (Spotify, YouTube Music, JioSaavn) start playing
+     * straight from the search; YouTube opens its results. Returns "playing", "searched", "opened" or "missing".
+     */
+    @JavascriptInterface
+    fun play(query: String, app: String): String {
+        val pkg = MEDIA[app.lowercase().trim()] ?: ""
+        val q = query.trim()
+        val installed = pkg.isNotEmpty() && act.packageManager.getLaunchIntentForPackage(pkg) != null
+        if (pkg.isNotEmpty() && !installed) return "missing"
+        if (q.isEmpty()) return if (installed && openApp(pkg)) "opened" else "missing"
+        if (pkg == YOUTUBE || pkg.isEmpty()) {
+            if (start(Intent(Intent.ACTION_SEARCH).setPackage(YOUTUBE).putExtra("query", q))) return "searched"
+            return if (start(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(q))))) "searched" else "missing"
+        }
+        val playIt = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+            .setPackage(pkg)
+            .putExtra(SearchManager.QUERY, q)
+            .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+        if (start(playIt)) return "playing"
+        return if (openApp(pkg)) "opened" else "missing" // Netflix, Hotstar, Prime: no public search, so just open
+    }
+
+    /** Is G1 the phone's home screen? */
+    @JavascriptInterface
+    fun isHome(): Boolean = act.packageManager
+        .resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
+        ?.activityInfo?.packageName == act.packageName
+
+    /** MainActivity: the Home button was pressed while G1 is the home screen. */
+    fun home() = emit("home")
 
     /** [{"name":"Papa","phone":"+9198..."}] from the phone's address book, or [] without permission. */
     @JavascriptInterface
@@ -318,5 +380,18 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
     fun release() {
         recognizer?.destroy()
         tts?.shutdown()
+    }
+
+    companion object {
+        private const val YOUTUBE = "com.google.android.youtube"
+        private val MEDIA = mapOf(
+            "youtube" to YOUTUBE,
+            "youtube music" to "com.google.android.apps.youtube.music",
+            "spotify" to "com.spotify.music",
+            "jiosaavn" to "com.jio.media.jiobeats",
+            "netflix" to "com.netflix.mediaclient",
+            "hotstar" to "in.startv.hotstar",
+            "prime video" to "com.amazon.avod.thirdpartyclient",
+        )
     }
 }

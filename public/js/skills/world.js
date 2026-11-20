@@ -1,5 +1,6 @@
 // The world outside: weather, maps, music, lookups, travel, camera, device.
 
+import { findApp } from './apps.js';
 import { L, ask, fail, norm, enc, getJson } from './util.js';
 
 const WEATHER = {
@@ -31,6 +32,20 @@ const describe = (ctx, code) => {
 };
 
 // Feeds built for endless scrolling. G1 does the task instead of opening the feed.
+const MEDIA_NAMES = { spotify: 'Spotify', youtube_music: 'YouTube Music', youtube: 'YouTube', jiosaavn: 'JioSaavn', netflix: 'Netflix', hotstar: 'Hotstar', prime_video: 'Prime Video' };
+
+/** Android app: hand the request to the media app itself. Null when not in the app (falls back to links). */
+function playNative(ctx, q, service) {
+  if (!ctx.platform.isApp?.() || !ctx.platform.play) return null;
+  const name = MEDIA_NAMES[service] || 'YouTube';
+  const r = ctx.platform.play(q, service.replace('_', ' '));
+  if (r === 'playing') return { ok: true, say: L(ctx, `Playing ${q} on ${name}.`, `${name} pe ${q} chala raha hu.`), data: { playing: q, service } };
+  if (r === 'searched') return { ok: true, say: L(ctx, `Here's ${q} on ${name}. Tap one to watch.`, `${name} pe ${q} khol diya. Jo dekhna hai us pe tap karo.`), data: { searched: q, service, note: 'The user picks the video.' } };
+  if (r === 'opened') return { ok: true, say: q ? L(ctx, `${name} is open. Search ${q} there.`, `${name} khul gaya. Wahan ${q} search kar lo.`) : L(ctx, `Opening ${name}.`, `${name} khol raha hu.`), data: { opened: name } };
+  if (r === 'missing') return fail(ctx, `${name} isn't installed on this phone.`, `${name} is phone pe install nahi hai.`, { error: 'not_installed', service });
+  return null;
+}
+
 const FEEDS = /^(instagram|insta|reels|facebook|fb|tiktok|twitter|x|snapchat|shorts|youtube shorts|moj|josh|sharechat)$/;
 
 const SITES = {
@@ -247,23 +262,25 @@ export const worldSkills = [
   },
   {
     name: 'play_media',
-    description: 'Play a song, artist, playlist, podcast or video.',
+    description: 'Play a song, artist, playlist, podcast, video or show. In the Android app, Spotify, YouTube Music and JioSaavn start playing straight away; YouTube opens the results; Netflix, Hotstar and Prime Video open.',
     parameters: {
       type: 'object',
-      properties: { query: { type: 'string' }, service: { type: 'string', enum: ['youtube', 'youtube_music', 'spotify'] } },
+      properties: { query: { type: 'string' }, service: { type: 'string', enum: ['youtube', 'youtube_music', 'spotify', 'jiosaavn', 'netflix', 'hotstar', 'prime_video'] } },
       required: ['query'],
     },
     run(args, ctx) {
       const q = String(args.query || '').trim();
-      if (!q) return ask(ctx, 'What do you want to hear?', 'Kya sunna hai?');
       const service = args.service || ctx.settings.get().mediaService || 'youtube';
+      if (!q && !['netflix', 'hotstar', 'prime_video'].includes(service)) return ask(ctx, 'What do you want to hear?', 'Kya sunna hai?');
+      const native = playNative(ctx, q, service);
+      if (native) return native;
       const url =
         service === 'spotify'
           ? `https://open.spotify.com/search/${enc(q)}`
           : service === 'youtube_music'
             ? `https://music.youtube.com/search?q=${enc(q)}`
             : `https://www.youtube.com/results?search_query=${enc(q)}`;
-      const name = { spotify: 'Spotify', youtube_music: 'YouTube Music', youtube: 'YouTube' }[service];
+      const name = MEDIA_NAMES[service] || 'YouTube';
       const { card } = openLink(ctx, url, q, L(ctx, `Play on ${name}`, `${name} pe chalao`));
       return { ok: true, say: L(ctx, `Here's ${q} on ${name}.`, `${q} ${name} pe laga diya.`), data: { query: q, service, note: 'Opened search results; the user picks the track.' }, card };
     },
@@ -305,13 +322,13 @@ export const worldSkills = [
   },
   {
     name: 'open_website',
-    description: 'Open a website by name or address. Endless-scroll feed apps are not opened; offer to do the actual task instead.',
+    description: 'Open an installed app (WhatsApp, camera, Google Pay, maps, settings, any app) or a website, by name or address. Endless-scroll feed apps are not opened; offer to do the actual task instead.',
     parameters: { type: 'object', properties: { site: { type: 'string', description: 'Site name or URL' } }, required: ['site'] },
     run(args, ctx) {
       const raw = String(args.site || '').trim();
       const q = norm(raw).replace(/\b(app|website|site|dot com|\.com)\b/g, '').trim();
       if (!q) return ask(ctx, 'Which site?', 'Kaun si site?');
-      if (FEEDS.test(q)) {
+      if (FEEDS.test(q) || FEEDS.test(q.split(' ')[0])) {
         return {
           ok: false,
           say: L(
@@ -322,6 +339,9 @@ export const worldSkills = [
           data: { error: 'feeds_not_supported', hint: 'Offer to message, search or play something specific instead.' },
         };
       }
+      // An installed app by that name (G1 is the home screen): open the app itself
+      const app = !/\./.test(raw) && findApp(ctx.platform.apps?.() || [], q);
+      if (app && ctx.platform.openApp(app.id)) return { ok: true, say: L(ctx, `Opening ${app.name}.`, `${app.name} khol raha hu.`), data: { opened_app: app.name } };
       const url = SITES[q] || (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(raw.replace(/^https?:\/\//, '')) ? 'https://' + raw.replace(/^https?:\/\//, '') : `https://www.google.com/search?q=${enc(raw)}`);
       const { card } = openLink(ctx, url, raw, L(ctx, 'Open', 'Kholo'));
       return { ok: true, say: L(ctx, `Opening ${raw}.`, `${raw} khol raha hu.`), data: { opened: url }, card };

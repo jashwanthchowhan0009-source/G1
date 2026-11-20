@@ -173,3 +173,29 @@ test('unknown chatter is not forced into a command', () => {
   assert.equal(intent('i had a long day and i am tired'), null);
   assert.equal(intent(''), null);
 });
+
+test('G1 as home screen: opens installed apps, plays in the app, never opens feeds', async () => {
+  const { createSkills } = await import('../public/js/skills/index.js');
+  const skills = createSkills();
+  const opened = [];
+  const played = [];
+  const ctx = {
+    settings: { get: () => ({ language: 'en-IN' }) },
+    platform: {
+      isApp: () => true,
+      apps: () => [{ name: 'WhatsApp', id: 'com.whatsapp' }, { name: 'GPay', id: 'com.gpay' }, { name: 'Instagram', id: 'com.instagram.android' }],
+      openApp: (id) => opened.push(id) > 0,
+      play: (q, app) => (played.push([q, app]), app === 'spotify' ? 'playing' : 'searched'),
+      open: () => 'opened',
+    },
+  };
+  let r = await skills.get('open_website').run({ site: 'google pay' }, ctx);
+  assert.equal(opened[0], 'com.gpay');
+  assert.match(r.say, /Opening GPay/);
+  r = await skills.get('open_website').run({ site: 'instagram' }, ctx);
+  assert.equal(r.data.error, 'feeds_not_supported');
+  assert.equal(opened.length, 1, 'feeds are never opened by voice');
+  r = await skills.get('play_media').run({ query: 'arijit singh', service: 'spotify' }, ctx);
+  assert.deepEqual(played[0], ['arijit singh', 'spotify']);
+  assert.match(r.say, /Playing arijit singh on Spotify/);
+});

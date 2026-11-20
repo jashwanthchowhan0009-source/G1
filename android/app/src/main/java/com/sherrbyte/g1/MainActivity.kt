@@ -96,6 +96,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.hasCategory(Intent.CATEGORY_HOME)) bridge.home() // Home pressed: back to G1's main screen
         handleWake(intent)
     }
 

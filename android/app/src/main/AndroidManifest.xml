@@ -35,6 +35,11 @@
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="upi" /></intent>
+        <!-- G1 as the home screen: open any app, play media by voice -->
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+        <intent><action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" /></intent>
+        <intent><action android:name="android.intent.action.SEARCH" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" android:host="www.youtube.com" /></intent>
     </queries>
 
     <application

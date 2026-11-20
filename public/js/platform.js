@@ -30,6 +30,27 @@ export function createPlatform() {
       return 'opened';
     },
 
+    /** Installed apps [{name, id}] (Android app only). [] elsewhere. */
+    apps() {
+      if (!has('apps')) return [];
+      const now = Date.now();
+      if (!this._apps || now - this._appsAt > 30000) {
+        this._apps = nativeJson('apps', []);
+        this._appsAt = now;
+      }
+      return this._apps;
+    },
+
+    openApp: (id) => (has('openApp') ? Boolean(nativeCall('openApp', id)) : false),
+
+    /** Play or find media. 'playing' | 'searched' | 'opened' | 'missing' | 'blocked'. */
+    play(query, app = '') {
+      if (has('play')) return nativeCall('play', query || '', app || '') || 'blocked';
+      if (!query) return 'blocked';
+      const url = app === 'spotify' ? `https://open.spotify.com/search/${encodeURIComponent(query)}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+      return this.open(url) === 'opened' ? 'searched' : 'blocked';
+    },
+
     /** True inside the G1 Android app. */
     isApp: () => has('permissions'),
 

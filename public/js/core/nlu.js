@@ -228,8 +228,8 @@ export function parseIntent(raw, { now = new Date() } = {}) {
     return { tool: 'post_video', args: {} };
   }
   // ---- media
-  const service = /\bspotify\b/.test(t) ? 'spotify' : /\byoutube music\b/.test(t) ? 'youtube_music' : /\byoutube\b/.test(t) ? 'youtube' : undefined;
-  const stripService = (s) => s.replace(/\b(?:on|pe|par|in|from)\s+(?:spotify|youtube music|youtube)\b|\b(?:spotify|youtube music|youtube)\s+(?:pe|par|mein|me)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const service = /\bspotify\b/.test(t) ? 'spotify' : /\byoutube music\b/.test(t) ? 'youtube_music' : /\byoutube\b/.test(t) ? 'youtube' : /\b(?:jio ?saavn|saavn)\b/.test(t) ? 'jiosaavn' : undefined;
+  const stripService = (s) => s.replace(/\b(?:on|pe|par|in|from)\s+(?:spotify|youtube music|youtube|jio ?saavn|saavn)\b|\b(?:spotify|youtube music|youtube|jio ?saavn|saavn)\s+(?:pe|par|mein|me)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if ((m = /^(?:play|bajao|chalao|sunao|laga do|lagao|put on)\s+(.+)$/.exec(t)) || (m = /^(.+?)\s+(?:bajao|chalao|sunao|laga do|lagao|play karo|play kar do|baja do|chala do|suna do)$/.exec(t))) {
     return { tool: 'play_media', args: { query: stripService(m[1]).replace(/^(?:the\s+)?(?:song|gaana|gana)\s+/, '').replace(/\s+(?:song|gaana|gana)$/, '') || m[1], service } };
   }
