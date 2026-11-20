@@ -12,7 +12,7 @@ const API = 'https://generativelanguage.googleapis.com';
 let good = { model: LIVE_MODELS[0], version: 'v1beta', until: 0 };
 
 /** One token: starts one session within a minute, lasts at most 30 minutes. */
-export async function mintToken(env, model, version = 'v1beta', fetchImpl = fetch) {
+export async function mintToken(env, _model, version = 'v1beta', fetchImpl = fetch) {
   const now = Date.now();
   const res = await fetchImpl(`${API}/${version}/auth_tokens`, {
     method: 'POST',
@@ -21,7 +21,7 @@ export async function mintToken(env, model, version = 'v1beta', fetchImpl = fetc
       uses: 1,
       expireTime: new Date(now + 30 * 60000).toISOString(),
       newSessionExpireTime: new Date(now + 60000).toISOString(),
-      liveConnectConstraints: { model: `models/${model}` },
+      // single use, one minute to start: the REST API rejects the SDK's model-lock field, so none here
     }),
   });
   const text = await res.text();
