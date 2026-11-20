@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node server.mjs",
     "test": "TZ=Asia/Kolkata node --test tests/*.test.js",
-    "test:browser": "node tests/browser/smoke.mjs"
+    "test:browser": "node tests/browser/smoke.mjs",
+    "test:live": "node tests/browser/live.mjs"
   },
   "engines": {
     "node": "22.x"

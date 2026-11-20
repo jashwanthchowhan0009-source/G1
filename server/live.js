@@ -70,7 +70,7 @@ export async function live(request, env, fetchImpl = fetch) {
  * Health self-test: token -> WebSocket -> one spoken reply. Tries models and API versions until one
  * answers with audio. { ok, model, version, ms, audioBytes } or { ok:false, tried:[...] }.
  */
-export async function liveSelfTest(env, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket) {
+export async function liveSelfTest(env, fetchImpl = fetch, WebSocketImpl = globalThis.WebSocket, declarations = null) {
   if (!WebSocketImpl) return { ok: false, error: 'no WebSocket in this runtime' };
   const tried = [];
   for (const version of ['v1beta', 'v1alpha']) {
@@ -78,9 +78,9 @@ export async function liveSelfTest(env, fetchImpl = fetch, WebSocketImpl = globa
       const t0 = Date.now();
       try {
         const token = await mintToken(env, model, version, fetchImpl);
-        const audioBytes = await oneTurn(WebSocketImpl, `${WS(version)}?access_token=${encodeURIComponent(token)}`, model);
+        const audioBytes = await oneTurn(WebSocketImpl, `${WS(version)}?access_token=${encodeURIComponent(token)}`, model, declarations);
         markGood(model, version);
-        return { ok: true, model, version, ms: Date.now() - t0, audioBytes };
+        return { ok: true, model, version, ms: Date.now() - t0, audioBytes, tools: declarations ? declarations.length : 1 };
       } catch (e) {
         tried.push(`${version}/${model}: ${String(e.message || e).slice(0, 160)}`);
       }
@@ -89,7 +89,7 @@ export async function liveSelfTest(env, fetchImpl = fetch, WebSocketImpl = globa
   return { ok: false, tried };
 }
 
-function oneTurn(WebSocketImpl, url, model) {
+function oneTurn(WebSocketImpl, url, model, declarations) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocketImpl(url);
     let bytes = 0;
@@ -112,7 +112,7 @@ function oneTurn(WebSocketImpl, url, model) {
           model: `models/${model}`,
           generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Achird' } } } },
           systemInstruction: { parts: [{ text: 'You are G1. Reply in one short sentence.' }] },
-          tools: [{ functionDeclarations: [{ name: 'set_timer', description: 'Start a timer', parameters: { type: 'object', properties: { minutes: { type: 'number' } }, required: ['minutes'] } }] }],
+          tools: [{ functionDeclarations: declarations || [{ name: 'set_timer', description: 'Start a timer', parameters: { type: 'object', properties: { minutes: { type: 'number' } }, required: ['minutes'] } }] }],
         },
       }));
     ws.onmessage = async (ev) => {

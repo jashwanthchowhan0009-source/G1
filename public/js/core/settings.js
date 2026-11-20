@@ -29,6 +29,7 @@ export const DEFAULTS = {
   userName: '',
   language: 'en-IN',
   handsfree: false,
+  live: true, // real-time voice call when the server has a Gemini key
   homeCity: '',
   countryCode: '91',
   mediaService: 'youtube',

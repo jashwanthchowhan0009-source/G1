@@ -11,6 +11,7 @@ import { sayClock } from './core/datetime.js';
 import { createSkills } from './skills/index.js';
 import { createPlatform } from './platform.js';
 import { createVoice } from './voice/tts.js';
+import { createLive } from './voice/live.js';
 import { createEars } from './voice/stt.js';
 import { createBloom, createCardView } from './ui.js';
 import { onNative, nativeCall, has as hasNative } from './native.js';
@@ -36,8 +37,8 @@ const T = (en, hin) => (hi() ? hin : en);
 // ---------- screen ----------
 const bloom = createBloom($('bloom'));
 const cardView = createCardView($('card'), {
-  onYes: () => hear('yes'),
-  onNo: () => hear('no'),
+  onYes: () => (live.active ? live.answer('yes') : hear('yes')),
+  onNo: () => (live.active ? live.answer('no') : hear('no')),
   labels: () => ({ yes: T('Yes, do it', 'Haan, karo'), no: T('No', 'Nahi') }),
 });
 
@@ -216,7 +217,7 @@ function wakeUp() {
   $('heard').textContent = '';
   $('said').textContent = T('Yes? Go ahead.', 'Haan, bolo.');
   lastViaVoice = true;
-  ears.listenOnce();
+  startTalking();
 }
 onNative('wake', wakeUp);
 
@@ -295,9 +296,65 @@ async function announce(item) {
   afterReply(null);
 }
 
+// ---------- live call ----------
+let liveDownUntil = 0;
+async function livePost(path, body) {
+  const pass = settings.get().passcode;
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(pass ? { 'x-g1-pass': pass } : {}) }, body: JSON.stringify(body || {}) });
+  return res.json();
+}
+const live = createLive({
+  skills,
+  ctx,
+  settings,
+  serverPost: livePost,
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  on: {
+    state(s, why) {
+      if (s === 'off') {
+        $('mic').classList.remove('live');
+        setState('idle');
+        if (why === 'dropped') notice(T('The call dropped. Tap to talk again.', 'Call kat gayi. Dobara tap karo.'));
+        return;
+      }
+      $('mic').classList.add('live');
+      if (s === 'connecting') {
+        notice('');
+        setState('thinking');
+        $('hint').textContent = T('Connecting…', 'Jod raha hu…');
+        return;
+      }
+      setState(s);
+      if (s === 'listening') $('hint').textContent = T('On a call with G1. Just talk. Tap to hang up.', 'G1 se call chal rahi hai. Bas bolo. Band karne ke liye tap.');
+    },
+    heard: (t) => ($('heard').textContent = normalizeWake(t)),
+    said: (t) => ($('said').textContent = t),
+    card: (c) => cardView.show(c || null),
+    notice: (t) => notice(t),
+    error(e) {
+      liveDownUntil = Date.now() + 10 * 60000;
+      notice(e === 'mic' ? T('Allow the microphone to talk to G1.', 'G1 se baat karne ke liye mic allow karo.') : T('Live call is not available right now, using normal mode.', 'Live call abhi nahi chal rahi, normal mode chal raha hai.'));
+    },
+  },
+});
+const liveReady = () => settings.get().live !== false && Date.now() > liveDownUntil && live.supported(server);
+
+/** Starts a live call; falls back to one normal listen if it can't connect. */
+function startTalking() {
+  if (!liveReady()) return ears.listenOnce();
+  voice.stop();
+  ears.stopHandsfree();
+  live.start().then((ok) => {
+    if (!ok && ears.supported) ears.listenOnce();
+  });
+}
+// G1 went to the background (another app opened): end the call so the mic is free
+document.addEventListener('visibilitychange', () => document.hidden && live.active && live.stop('hidden'));
+
 // ---------- controls ----------
 function micPressed() {
   voice.unlock();
+  if (live.active) return live.stop('user');
   if (state === 'listening') return ears.finish();
   if (state === 'thinking') return;
   if (state === 'speaking') voice.stop();
@@ -306,7 +363,7 @@ function micPressed() {
     return notice(T('This browser has no voice input. Type instead, or open G1 in Chrome.', 'Is browser mein voice nahi hai. Type karo, ya Chrome mein kholo.'));
   }
   $('heard').textContent = '';
-  ears.listenOnce();
+  startTalking();
 }
 
 function showTypebar(on) {
@@ -382,6 +439,7 @@ function fillSettings() {
   f.language.value = s.language;
   f.homeCity.value = s.homeCity;
   f.handsfree.checked = s.handsfree;
+  f.live.checked = s.live !== false;
   f.provider.value = s.llm.provider;
   f.apiKey.value = s.llm.apiKey;
   f.model.value = s.llm.model;
@@ -407,6 +465,7 @@ function readSettings() {
     language: f.language.value,
     homeCity: f.homeCity.value.trim(),
     handsfree: f.handsfree.checked,
+    live: f.live.checked,
     passcode: f.passcode.value.trim(),
     llm: { provider: f.provider.value, apiKey: f.apiKey.value.trim(), model: f.model.value.trim(), baseUrl: f.baseUrl.value.trim() },
     tts: { elevenKey: f.elevenKey.value.trim(), preset: f.preset.value, voiceId: '', browserVoice: f.browserVoice.value, rate: Number(f.rate.value) || 1 },
