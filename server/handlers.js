@@ -123,13 +123,8 @@ export async function health(request, env, fetchImpl = fetch) {
   if (new URL(request.url).searchParams.get('speak') && geminiTtsReady(env) && !locked(request, env)) {
     const t0 = Date.now();
     try {
-      const line = 'Haan bolo, main sun raha hoon.';
-      const { wav, model } = await geminiSpeak(env, line, 'Achird', fetchImpl);
-      const t1 = Date.now();
-      const plain = await geminiSpeak(env, line, 'Achird', fetchImpl, { style: false });
-      // seconds of audio: if "styled" is much longer than "plain", the style line is being read out
-      const secs = (w) => Math.round(((w.length - 44) / 48000) * 10) / 10;
-      info.speak = { ok: true, ms: t1 - t0, warmMs: Date.now() - t1, model, styledSecs: secs(wav), plainSecs: secs(plain.wav) };
+      const { wav, model } = await geminiSpeak(env, 'Haan bolo, main sun raha hoon.', 'Achird', fetchImpl);
+      info.speak = { ok: true, ms: Date.now() - t0, model, seconds: Math.round(((wav.length - 44) / 48000) * 10) / 10 };
     } catch (e) {
       info.speak = { ok: false, ms: Date.now() - t0, error: e.message };
     }
@@ -204,7 +199,7 @@ export function pcmToWav(pcm, rate = 24000) {
 }
 
 /** Text -> { wav, model } with Gemini speech, trying the fastest model that answers. */
-export async function geminiSpeak(env, text, voice, fetchImpl = fetch, { style = true } = {}) {
+export async function geminiSpeak(env, text, voice, fetchImpl = fetch) {
   const name = GEMINI_VOICES.has(voice) ? voice : 'Achird';
   const order = Date.now() < ttsGood.until ? [ttsGood.model, ...GEMINI_TTS.filter((m) => m !== ttsGood.model)] : GEMINI_TTS;
   let last = { status: 502, error: 'no voice model answered' };
@@ -215,8 +210,8 @@ export async function geminiSpeak(env, text, voice, fetchImpl = fetch, { style =
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.LLM_API_KEY },
         body: JSON.stringify({
-          // the style line is direction for the voice; only the words after it are spoken
-          contents: [{ parts: [{ text: style ? `Say this warmly and naturally, like a close friend talking, with a light Indian accent: ${text}` : text }] }],
+          // plain text only: a style line in front gets read out loud by these models (measured: 7.8 s vs 2.1 s)
+          contents: [{ parts: [{ text }] }],
           generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: name } } } },
         }),
       }, 9000);

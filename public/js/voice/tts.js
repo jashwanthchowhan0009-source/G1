@@ -12,7 +12,8 @@ export function chunksOf(text, max = 220) {
   const out = [];
   let cur = '';
   for (const s of sentences.map((x) => x.trim()).filter(Boolean)) {
-    if (cur && (cur + ' ' + s).length > max) {
+    // the first sentence goes alone: a short first clip comes back from the voice service sooner
+    if (cur && (!out.length || (cur + ' ' + s).length > max)) {
       out.push(cur);
       cur = s;
     } else cur = cur ? cur + ' ' + s : s;
