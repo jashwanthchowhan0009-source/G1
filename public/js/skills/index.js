@@ -4,9 +4,11 @@ import { commSkills } from './comm.js';
 import { lifeSkills } from './life.js';
 import { worldSkills } from './world.js';
 import { createSkills_ } from './create.js';
+import { privacySkills } from './privacy.js';
+import { guarded } from '../core/privacy.js';
 
 export function createSkills() {
-  const all = [...commSkills, ...lifeSkills, ...worldSkills, ...createSkills_];
+  const all = [...commSkills, ...lifeSkills, ...worldSkills, ...createSkills_, ...privacySkills].map(guarded); // every skill: permission check + activity log
   const byName = new Map(all.map((s) => [s.name, s]));
   return {
     get: (name) => byName.get(name),

@@ -6,6 +6,7 @@
 
 import { buildSystemPrompt } from '../core/persona.js';
 import { yesNo } from '../core/nlu.js';
+import { forAI, shield } from '../core/privacy.js';
 
 const IN_RATE = 16000;
 const OUT_RATE = 24000;
@@ -165,10 +166,10 @@ export function createLive({ skills, ctx, settings, serverPost, timeZone = '', o
       pending = res.confirm;
       heard = ''; // only words spoken after the question count as the answer
       emit('card', res.confirm.card || { type: 'confirm', title: res.confirm.say });
-      return { status: 'waiting_for_user_yes_or_no', ask: res.confirm.say };
+      return forAI(call.name, { status: 'waiting_for_user_yes_or_no', ask: res.confirm.say });
     }
     if (res.card) emit('card', res.card);
-    return { ok: res.ok !== false, say: res.say || '', ...(res.data || {}) };
+    return forAI(call.name, { ok: res.ok !== false, say: res.say || '', ...(res.data || {}) }); // no numbers or UPI IDs to the cloud
   }
 
   /** The user's yes or no for a waiting action (spoken or tapped). Done here, not by the AI. */
@@ -183,7 +184,7 @@ export function createLive({ skills, ctx, settings, serverPost, timeZone = '', o
       try {
         const res = (await action.proceed()) || {};
         if (res.card) emit('card', res.card);
-        note = `[device] The user said yes and it is done: ${res.say || 'done'}`;
+        note = forAI('', `[device] The user said yes and it is done: ${res.say || 'done'}`);
       } catch (e) {
         note = `[device] The user said yes but it failed: ${String(e?.message || e)}`;
       }
@@ -201,7 +202,7 @@ export function createLive({ skills, ctx, settings, serverPost, timeZone = '', o
     model = t.model;
     const tools = [{ functionDeclarations: [...toDeclarations(skills.toolSchemas()), END_TOOL] }];
     const system =
-      buildSystemPrompt({ settings: settings.get(), memory: ctx.store.get('memory', []), now: ctx.now(), timeZone }) + LIVE_RULES;
+      buildSystemPrompt({ settings: settings.get(), memory: shield(ctx.store.get('memory', [])), now: ctx.now(), timeZone }) + LIVE_RULES;
     return new Promise((resolve, reject) => {
       const sock = new WebSocket(`${t.ws}?access_token=${encodeURIComponent(t.token)}`);
       let ready = false;

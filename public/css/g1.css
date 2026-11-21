@@ -182,3 +182,6 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 
 /* live call: a soft ring around the mic while the line is open */
 #mic.live { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.28), 0 0 0 10px rgba(255, 255, 255, 0.1); }
+
+.activity-list p { border-top: 1px solid rgba(255, 255, 255, .2); padding: 10px 4px; font-size: 15px; opacity: 1; }
+#permList .check { margin: 2px 0; }

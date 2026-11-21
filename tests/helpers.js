@@ -1,5 +1,6 @@
 // Test rig: a G1 brain with fake device, fake clock and fake network.
 
+import { createGuard } from '../public/js/core/privacy.js';
 import { createStore } from '../public/js/core/store.js';
 import { createSettings } from '../public/js/core/settings.js';
 import { createScheduler } from '../public/js/core/scheduler.js';
@@ -57,6 +58,7 @@ export function makeG1({ llm = null, settings: patch = {}, routes = {}, now = NO
     server: () => server,
     aiAvailable: () => Boolean(llm),
   };
+  ctx.guard = createGuard({ settings: () => settings.get(), store, now: () => now.getTime() });
   const skills = createSkills();
   const brain = createBrain({ skills, ctx, getLLM: () => llm, timeZone: 'Asia/Kolkata' });
   return { brain, ctx, store, settings, scheduler, skills, opened, fired, timers, fetchCalls };

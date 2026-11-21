@@ -12,13 +12,19 @@ import { createSkills } from './skills/index.js';
 import { createPlatform } from './platform.js';
 import { createVoice } from './voice/tts.js';
 import { createLive } from './voice/live.js';
+import { createGuard, PERMISSIONS } from './core/privacy.js';
 import { createEars } from './voice/stt.js';
 import { createBloom, createCardView } from './ui.js';
 import { onNative, nativeCall, has as hasNative } from './native.js';
 
 const $ = (id) => document.getElementById(id);
 const screen = $('screen');
-const store = createStore();
+// The Android app encrypts everything G1 saves with a key locked in the phone's hardware (Android Keystore)
+const store = createStore(
+  undefined,
+  'g1:',
+  hasNative('seal') ? { seal: (s) => nativeCall('seal', s), open: (s) => nativeCall('unseal', s) } : null,
+);
 const settings = createSettings(store);
 const platform = createPlatform();
 const skills = createSkills();
@@ -91,12 +97,69 @@ const ctx = {
   core: createCoreLink({ getServer: () => server, settings }),
   server: () => server,
   aiAvailable: () => Boolean(getLLM()),
+  guard: null, // set below: permission checks and the activity log for every skill
   get vision() {
     const llm = getLLM();
     return llm ? (photo, q) => llm.see(photo, q, 'You are G1, speaking aloud. Answer in one or two short spoken sentences, in the language of the question. No markdown.') : null;
   },
 };
+ctx.guard = createGuard({ settings: () => settings.get(), store });
 const brain = createBrain({ skills, ctx, getLLM, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+
+// ---------- privacy ----------
+function fillPrivacy(s) {
+  const f = $('settingsForm');
+  f.paused.checked = Boolean(s.paused);
+  f.localFirst.checked = s.localFirst !== false;
+  $('vaultStatus').textContent = store.sealed
+    ? T('Everything G1 saves is encrypted on this phone, with a key locked in its hardware.', 'G1 jo bhi save karta hai wo is phone pe encrypted hai, chaabi phone ke hardware mein band hai.')
+    : T('In a browser, G1 saves to this browser without encryption. The Android app keeps it encrypted.', 'Browser mein G1 bina encryption ke save karta hai. Android app mein sab encrypted rehta hai.');
+  const list = $('permList');
+  list.replaceChildren();
+  for (const [key, en, hi] of PERMISSIONS) {
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.name = `perm_${key}`;
+    box.checked = s.permissions?.[key] !== false;
+    label.append(box, ' ', T(en, hi));
+    list.append(label);
+  }
+}
+function readPrivacy(f) {
+  return {
+    paused: f.paused.checked,
+    localFirst: f.localFirst.checked,
+    permissions: Object.fromEntries(PERMISSIONS.map(([key]) => [key, f[`perm_${key}`]?.checked !== false])),
+  };
+}
+function fillActivity() {
+  const list = $('activityList');
+  list.replaceChildren();
+  const items = ctx.guard.activity();
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.textContent = T('Nothing yet.', 'Abhi tak kuch nahi.');
+    list.append(p);
+    return;
+  }
+  for (const a of items.slice(0, 100)) {
+    const p = document.createElement('p');
+    const when = new Date(a.t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    const tag = a.blocked ? T(' (blocked)', ' (roka)') : a.waiting ? T(' (asked you)', ' (poocha)') : a.confirmed ? T(' (you said yes)', ' (tumne haan bola)') : a.ok ? '' : T(' (failed)', ' (fail)');
+    p.textContent = `${when} · ${a.what || a.tool}${tag}`;
+    list.append(p);
+  }
+}
+$('activityBtn').addEventListener('click', () => {
+  fillActivity();
+  $('activitySheet').showModal();
+});
+$('activityClear').addEventListener('click', () => {
+  ctx.guard.clearActivity();
+  fillActivity();
+});
 
 // ---------- voice ----------
 const voice = createVoice({ settings, getServer: () => server });
@@ -440,6 +503,7 @@ function fillSettings() {
   f.homeCity.value = s.homeCity;
   f.handsfree.checked = s.handsfree;
   f.live.checked = s.live !== false;
+  fillPrivacy(s);
   f.provider.value = s.llm.provider;
   f.apiKey.value = s.llm.apiKey;
   f.model.value = s.llm.model;
@@ -466,6 +530,7 @@ function readSettings() {
     homeCity: f.homeCity.value.trim(),
     handsfree: f.handsfree.checked,
     live: f.live.checked,
+    ...readPrivacy(f),
     passcode: f.passcode.value.trim(),
     llm: { provider: f.provider.value, apiKey: f.apiKey.value.trim(), model: f.model.value.trim(), baseUrl: f.baseUrl.value.trim() },
     tts: { elevenKey: f.elevenKey.value.trim(), preset: f.preset.value, voiceId: '', browserVoice: f.browserVoice.value, rate: Number(f.rate.value) || 1 },
@@ -542,12 +607,14 @@ $('hearIt').addEventListener('click', () => {
 $('erase').addEventListener('click', () => {
   if (!confirm('Erase all G1 contacts, notes, reminders and settings on this device?')) return;
   scheduler.stop();
+  store.wipe();
   Object.keys(localStorage).filter((k) => k.startsWith('g1:')).forEach((k) => localStorage.removeItem(k));
   location.reload();
 });
 
 // ---------- start ----------
 async function boot() {
+  store.sealAll(); // anything saved before the vault existed gets encrypted now
   setState('idle');
   refreshStatus();
   setInterval(refreshStatus, 20000);

@@ -139,6 +139,7 @@ export function parseIntent(raw, { now = new Date() } = {}) {
   if ((m = new RegExp(`^(?:call|phone)\\s+${VERB_HI}\\s+(.+?)(?:\\s+ko)?$`).exec(t))) return { tool: 'call_contact', args: { to: m[1] } };
 
   // ---- messages
+  if (/\b(what (?:did|have) you (?:do|done)|what did g1 do|kya kya kiya|kya kiya (?:aaj|tumne)|tumne kya kiya|your activity)\b/.test(t)) return { tool: 'activity_log', args: {} };
   const channelOf = (w) => (/sms|text/.test(w) ? 'sms' : 'whatsapp');
   if ((m = /^(?:send\s+)?(?:a\s+|an\s+)?(whatsapp|message|msg|text|sms)(?:\s+message)?\s+(?:to\s+)?(.+?)\s+(?:that|saying|say|ki|ke|:)\s+(.+)$/.exec(t))) {
     return { tool: 'send_message', args: { to: m[2], text: m[3], channel: channelOf(m[1]) } };

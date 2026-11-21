@@ -24,6 +24,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.util.Locale
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.SecretKey
+import javax.crypto.KeyGenerator
+import javax.crypto.Cipher
+import java.security.KeyStore
+import android.util.Base64
+import android.security.keystore.KeyProperties
+import android.security.keystore.KeyGenParameterSpec
 
 /**
  * window.G1Native inside the G1 web app. Every method is called by G1's own code only
@@ -186,6 +194,42 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         val pkg = mapOf("instagram" to "com.instagram.android", "facebook" to "com.facebook.katana", "whatsapp" to "com.whatsapp")[app.lowercase()]
         if (pkg != null && start(Intent(send).setPackage(pkg))) return "opened"
         return if (start(Intent.createChooser(send, "Share with"))) "opened" else "blocked"
+    }
+
+    // ------------------------------------------------------------------ the vault
+    // Everything the app saves is encrypted with an AES key that lives in the phone's hardware keystore.
+    // The key never leaves it: not to the web page, not to G1's servers, not into backups.
+
+    private val vaultKey: SecretKey by lazy {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(VAULT, null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(
+                KeyGenParameterSpec.Builder(VAULT, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build(),
+            )
+        }.generateKey()
+    }
+
+    @JavascriptInterface
+    fun seal(plain: String): String? = try {
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, vaultKey)
+        Base64.encodeToString(c.iv + c.doFinal(plain.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    } catch (e: Exception) {
+        null // the store then saves it unsealed rather than losing it
+    }
+
+    @JavascriptInterface
+    fun unseal(sealed: String): String? = try {
+        val all = Base64.decode(sealed, Base64.NO_WRAP)
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.DECRYPT_MODE, vaultKey, GCMParameterSpec(128, all, 0, 12))
+        String(c.doFinal(all, 12, all.size - 12), Charsets.UTF_8)
+    } catch (e: Exception) {
+        null
     }
 
     // ------------------------------------------------------------------ G1 as the home screen
@@ -383,6 +427,7 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
     }
 
     companion object {
+        private const val VAULT = "g1-vault"
         private const val YOUTUBE = "com.google.android.youtube"
         private val MEDIA = mapOf(
             "youtube" to YOUTUBE,

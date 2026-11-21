@@ -2,6 +2,10 @@
 // With an AI connection it reasons with tools; without one it uses the built-in command understanding.
 
 import { parseIntent, stripWake, yesNo } from './nlu.js';
+import { forAI, shield, shieldText } from './privacy.js';
+
+// Understood on the phone when the command is clear: nothing about them goes to the cloud
+const ON_PHONE = new Set(['set_timer', 'cancel_timer', 'check_timers', 'get_time', 'get_date', 'call_contact', 'flashlight', 'device_status', 'calculate', 'play_media', 'open_website']);
 import { buildSystemPrompt, forSpeech, smallTalk, greeting } from './persona.js';
 
 const MAX_ROUNDS = 8;
@@ -64,7 +68,7 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
   }
 
   async function withModel(llm, text, { scheduled = false } = {}) {
-    let system = buildSystemPrompt({ settings: settings(), memory: ctx.store.get('memory', []), now: ctx.now(), timeZone });
+    let system = buildSystemPrompt({ settings: settings(), memory: shield(ctx.store.get('memory', [])), now: ctx.now(), timeZone });
     if (scheduled) system += '\n\nThis is a check you scheduled earlier with check_later. Do the task now. If there is nothing the user needs to hear, reply with exactly: SKIP';
     const tools = skills.toolSchemas();
     const messages = [...history, { role: 'user', content: text }];
@@ -93,7 +97,8 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
         }
         if (res.card) card = res.card;
         if (res.say) lastSay = res.say;
-        messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ ok: res.ok !== false, ...(res.data || {}), spoken_summary: res.say || undefined }) });
+        // the AI gets the result without phone numbers, UPI IDs or emails (see core/privacy.js)
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(forAI(tc.name, { ok: res.ok !== false, ...(res.data || {}), spoken_summary: res.say || undefined })) });
       }
       if (confirm) {
         pending = confirm;
@@ -138,6 +143,14 @@ export function createBrain({ skills, ctx, getLLM = () => null, timeZone = '' })
       if (parseIntent(text)?.tool === '_stop') return { say: '', source: 'local', stop: true };
 
       const llm = getLLM();
+      // Clear, simple commands are understood on the phone and never reach the cloud AI
+      if (llm && settings().localFirst !== false && !followUp && ON_PHONE.has(parseIntent(text, { now: ctx.now() })?.tool)) {
+        const reply = await local(text);
+        if (reply.ok !== false && reply.understood !== false) {
+          history = trim([...history, { role: 'user', content: text }, { role: 'assistant', content: shieldText(reply.say || '') }]);
+          return { ...reply, onPhone: true };
+        }
+      }
       if (llm) {
         try {
           return await withModel(llm, text);

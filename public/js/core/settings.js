@@ -30,6 +30,10 @@ export const DEFAULTS = {
   language: 'en-IN',
   handsfree: false,
   live: true, // real-time voice call when the server has a Gemini key
+  // privacy: every kind of action can be switched off; 'paused' stops all of them
+  permissions: {},
+  paused: false,
+  localFirst: true, // clear simple commands are understood on the phone, not in the cloud
   homeCity: '',
   countryCode: '91',
   mediaService: 'youtube',

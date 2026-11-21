@@ -170,3 +170,11 @@ Settings → Connections → **Hey G1, anytime** → Allow. G1 then listens for 
 - Requires the GitHub secret `G1_KEYSTORE_PASS` (12+ characters, any password you choose). The build then creates G1's signing key once and keeps it in the release only encrypted with that password, so every build installs over the last one. Never change or lose that password.
 - The screen, brain and skills come from the web app, so most improvements reach the phone instantly without any update.
 
+
+### Privacy (built in)
+
+- **Vault:** in the Android app everything G1 saves (contacts, memory, notes, history, settings) is encrypted with AES-256 using a key locked in the phone's hardware keystore. App backups are off.
+- **The AI sees less:** phone numbers, UPI IDs, emails and card numbers are replaced before anything goes to the cloud AI; the phone fills them in when it acts. Clear simple commands (timer, call, open app, play music, time) are understood on the phone and never sent.
+- **You decide:** Settings → Privacy switches off calls, messages, payments, camera, location, web or memory one by one, or pauses every action.
+- **Everything is logged on the phone:** Settings → Privacy → What G1 did, or ask "G1, what did you do?".
+- **Before real users:** turn on billing for the Gemini API key. On the free tier Google may use prompts to improve its products and people may review them; on the paid tier it does not.

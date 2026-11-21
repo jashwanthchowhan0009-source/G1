@@ -204,11 +204,13 @@ test('AI mode: messages still wait for the user to say yes', async () => {
 test('AI mode: if the AI service fails, G1 falls back to basic mode and says so only when it must', async () => {
   const llm = scriptedLLM([{ error: 'The AI key was rejected.' }]);
   const g = makeG1({ llm });
+  // a clear command is understood on the phone: it never needs the AI
   let r = await g.brain.handle('set a timer for 5 minutes');
   assert.match(r.say, /5 minutes, starting now/);
-  assert.equal(r.notice, 'The AI key was rejected.');
+  assert.equal(r.onPhone, true);
   r = await g.brain.handle('tell me something interesting about space');
   assert.match(r.say, /can't reach my AI brain/);
+  assert.equal(r.notice, 'The AI key was rejected.');
 });
 
 test('AI mode: camera questions go to the vision model', async () => {
@@ -432,4 +434,34 @@ test('agentic: check_later schedules a task, runs it with tools later, and stays
   const basic = makeG1();
   const s = await basic.skills.get('check_later').run({ task: 'x', when_iso: '2026-11-11T09:00:00' }, basic.ctx);
   assert.equal(s.data.error, 'needs_ai');
+});
+
+test('privacy: the AI never sees numbers, simple commands stay on the phone, permissions and pause hold', async () => {
+  const { shieldText } = await import('../public/js/core/privacy.js');
+  const llm = scriptedLLM([{ calls: [{ name: 'add_contact', args: { name: 'Ravi', phone: '+91 98765 43210', upi: 'ravi@okhdfc' } }] }, { text: 'Done.' }]);
+  const seen = llm.seen;
+  const g = makeG1({ llm });
+  await g.brain.handle('save Ravi as a contact, 98765 43210, upi ravi@okhdfc');
+  const toolMsgs = JSON.stringify(seen.flatMap((r) => r.messages.filter((m) => m.role === 'tool')));
+  assert.ok(toolMsgs.length > 0);
+  assert.doesNotMatch(toolMsgs, /98765|43210|ravi@okhdfc/, 'tool results reach the AI without numbers or UPI IDs');
+  assert.equal(shieldText('Call +91 98765 43210 on 2026-11-21 for 500'), 'Call [number saved on phone] on 2026-11-21 for 500');
+
+  // on the phone: no AI call at all
+  const before = seen.length;
+  const r = await g.brain.handle('what time is it');
+  assert.equal(r.onPhone, true);
+  assert.equal(seen.length, before);
+
+  // a switched-off permission and the pause switch are enforced for every skill
+  g.settings.set({ permissions: { calls: false } });
+  let res = await g.skills.get('call_contact').run({ name: 'Ravi' }, g.ctx);
+  assert.equal(res.data.error, 'permission_off');
+  g.settings.set({ permissions: {}, paused: true });
+  res = await g.skills.get('set_timer').run({ minutes: 1 }, g.ctx);
+  assert.equal(res.data.error, 'paused');
+  res = await g.skills.get('get_time').run({}, g.ctx);
+  assert.notEqual(res.ok, false, 'telling the time still works while paused');
+  const log = g.ctx.guard.activity();
+  assert.ok(log.some((a) => a.tool === 'set_timer' && a.blocked));
 });
