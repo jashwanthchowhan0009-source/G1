@@ -158,7 +158,6 @@ Fonts: Anek (Latin, Devanagari, Telugu), SIL Open Font License, in `public/fonts
 
 Settings → Connections → **Hey G1, anytime** → Allow. G1 then listens for "Hey G1" (or "Jeevan", which is how many phones hear it) with an offline recogniser that runs only on the phone; nothing is recorded or sent. Say it with the screen off and G1 turns the screen on, asks for your unlock if the phone is locked, and starts listening.
 
-- Also allow **Open instantly** (Display over other apps) so G1 opens straight away instead of showing a notification to tap.
 - Optional: Settings → Apps → Default apps → Digital assistant → G1, to open it with a long-press of power/home.
 - After a restart, open G1 once; Android only lets the microphone start while the app is on screen.
 - Talk like a call: after G1 answers it keeps listening. Stay quiet or say "bas" to end.
@@ -166,7 +165,7 @@ Settings → Connections → **Hey G1, anytime** → Allow. G1 then listens for 
 ### One link, automatic updates
 
 - Install: **https://g-one-two.vercel.app/download** (always the latest G1.apk).
-- G1 checks for a new version each time it opens and offers it; the first update needs one tap and "allow installs from G1", later ones can install quietly (Android 12+).
+- G1 checks for a new version and offers to open the download; install it over the old app (same signing key, nothing lost). The app never installs APKs itself, because Play Protect blocks apps that do.
 - Requires the GitHub secret `G1_KEYSTORE_PASS` (12+ characters, any password you choose). The build then creates G1's signing key once and keeps it in the release only encrypted with that password, so every build installs over the last one. Never change or lose that password.
 - The screen, brain and skills come from the web app, so most improvements reach the phone instantly without any update.
 

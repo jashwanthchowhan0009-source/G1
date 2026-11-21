@@ -79,7 +79,6 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         val out = JSONObject()
         for ((name, perms) in names) out.put(name, perms.isEmpty() || perms.any { has(it) })
         out.put("wake", WakeService.isEnabled(act) && has(Manifest.permission.RECORD_AUDIO))
-        out.put("popup", Settings.canDrawOverlays(act))
         out.put("update", false) // a button: "Check now"
         out.put("home", isHome())
         return out.toString()
@@ -92,10 +91,6 @@ class G1Bridge(private val act: Activity, private val web: WebView) {
         if (name == "update") return ui { Updater.check(act, force = true) }
         if (name == "home") {
             if (!start(Intent(Settings.ACTION_HOME_SETTINGS))) start(Intent(Settings.ACTION_SETTINGS))
-            return
-        }
-        if (name == "popup") {
-            start(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + act.packageName)))
             return
         }
         val perms = names[name] ?: return

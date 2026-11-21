@@ -132,7 +132,6 @@ class MainActivity : Activity() {
         super.onResume()
         if (WakeService.isEnabled(this)) WakeService.send(this, WakeService.ACTION_PAUSE) // G1 on screen has the mic
         bridge.permissionsChanged()
-        Updater.resume(this)
     }
 
     override fun onStop() {

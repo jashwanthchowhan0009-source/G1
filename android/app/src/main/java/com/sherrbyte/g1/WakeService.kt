@@ -141,8 +141,8 @@ class WakeService : Service(), RecognitionListener {
             .putExtra(MainActivity.EXTRA_WAKE, true)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         try { startActivity(open) } catch (e: Exception) { Log.w(TAG, "direct open blocked", e) }
-        // Android may block opening from the background without "Display over other apps".
-        // This alert opens G1 full screen (or as a heads-up the owner taps) in that case.
+        // Android may block opening from the background. This alert opens G1 full screen
+        // (or as a heads-up the owner taps) in that case.
         val pi = PendingIntent.getActivity(this, 2, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = Notification.Builder(this, CH_WAKE)
             .setSmallIcon(R.drawable.ic_launcher)
